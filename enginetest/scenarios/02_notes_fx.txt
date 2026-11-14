@@ -1,0 +1,19 @@
+engine 0 11
+load
+set SPACE 0.7
+set DELAY 0.5
+set CHORUS 0.6
+set DRIVE 0.4
+set CRUSH 0.3
+set TONE 0.3
+set RESO 0.6
+on 60 0.8
+on 64 0.7
+on 67 0.9
+run 72000
+off 60
+off 64
+set TONE 0.75
+run 48000
+alloff
+run 72000

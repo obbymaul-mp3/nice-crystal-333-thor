@@ -1,0 +1,10 @@
+@font-face { font-family: Michroma; src: url(Michroma-Regular.ttf); }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #05050A; color: #E8EAF6; font-family: sans-serif; user-select: none; -webkit-user-select: none; touch-action: none; }
+.f { font-family: Michroma, sans-serif; }
+.skew { transform: skewX(-14deg); transform-origin: left bottom; }
+.dim { color: #C9D1FF; } .dimmer { color: #A9AEC8; }
+button { font: inherit; color: inherit; border: 0; padding: 0; background: none; touch-action: none; }
+.cap { border-radius: 99rem; background: rgba(10,10,30,.8); box-shadow: inset 0 0 0 1px #5F6BC8; }
+.cap.on { background: rgba(61,91,255,.3); box-shadow: inset 0 0 0 1px #9FB0FF, 0 0 2rem rgba(61,91,255,.8); color: #fff; }
+.streak { position: absolute; left: -15%; width: 135%; pointer-events: none; }

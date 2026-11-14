@@ -1,0 +1,10 @@
+cmake_minimum_required(VERSION 3.22.1)
+project(nc333 CXX)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+find_package(oboe REQUIRED CONFIG)
+add_library(nc333 SHARED native.cpp engine/GrainEngine.cpp)
+target_include_directories(nc333 PRIVATE engine)
+# the audio code must be optimised even in a debug build of the app
+target_compile_options(nc333 PRIVATE -O2 -Wall)
+target_link_libraries(nc333 oboe::oboe log)

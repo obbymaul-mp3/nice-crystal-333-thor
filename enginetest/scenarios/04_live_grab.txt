@@ -1,0 +1,16 @@
+engine 0 5
+load
+feed 1
+live 1
+set PLAY 1
+set MIX 1
+run 144000
+set FREEZE 1
+set PITCH 0.75
+run 48000
+set FREEZE 0
+grab
+run 9600
+set MIX 0.4
+set SCAN 0.3
+run 96000

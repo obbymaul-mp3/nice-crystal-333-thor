@@ -1,0 +1,10 @@
+engine 0 7
+load
+set PLAY 1
+run 96000
+set SIZE 0.35
+set DENSITY 0.8
+set SPRAY 0.6
+set SHATTER 0.5
+set REV 0.3
+run 96000

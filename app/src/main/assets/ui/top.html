@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Nice Crystal 333 display</title><link rel="stylesheet" href="ui.css">
+<style>
+html { font-size: calc(100vw / 96); }
+body { background: radial-gradient(ellipse at 78% 62%, #1B1F5E 0%, #07071A 45%, #020206 100%); }
+#rail { position: absolute; left: 2.2rem; top: 2.2rem; width: 8.4rem; bottom: 2.2rem; display: flex; flex-direction: column; gap: .6rem; text-align: center; }
+#rail .tab { padding: 1rem .4rem; border-radius: 3rem; font-size: 1.1rem; } #rail .tab small { display: block; font-family: sans-serif; font-size: 1.15rem; margin-top: .2rem; }
+#rail .tab.on { background: rgba(61,91,255,.3); box-shadow: inset 0 0 0 1px #9FB0FF, 0 0 2.2rem rgba(61,91,255,.8); color: #fff; }
+#name { position: absolute; left: 13.6rem; top: 2.4rem; font-size: 4rem; letter-spacing: .4rem; color: #fff; text-shadow: 0 0 1.8rem rgba(140,150,255,.9); white-space: nowrap; }
+#sub { position: absolute; left: 13.6rem; top: 8.6rem; font-size: 1.5rem; letter-spacing: .3rem; }
+#keybpm { position: absolute; right: 3rem; top: 3.2rem; font-size: 2.2rem; color: #fff; text-align: right; }
+#wave { position: absolute; left: 13.6rem; top: 12.4rem; width: 62rem; height: 25rem; }
+#read { position: absolute; left: 13.6rem; top: 38.4rem; width: 62rem; display: flex; justify-content: space-between; font-size: 1.2rem; }
+#pet { position: absolute; left: 78.6rem; top: 12.6rem; width: 15rem; text-align: center; } #pet svg { width: 12rem; height: 14rem; } #mood { font-size: 1.5rem; letter-spacing: .3rem; margin-top: .6rem; }
+#foot { position: absolute; left: 13.6rem; right: 3rem; bottom: 2.4rem; height: 8rem; display: flex; align-items: center; gap: 1.2rem; }
+#foot .cap { height: 6rem; padding: .9rem 1.8rem; flex: 1; min-width: 0; } #foot b { display: block; font-family: Michroma; font-weight: 400; font-size: 1.1rem; color: #fff; } #foot span { display: block; font-size: 1.2rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#meter { width: 12rem; display: grid; gap: .5rem; } #meter div { height: .5rem; border-radius: .3rem; background: #2A2F66; overflow: hidden; } #meter i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #3D5BFF, #fff); }
+</style></head>
+<body>
+<div class="streak" style="top: 46%; height: 4.6rem; transform: rotate(-21deg); background: linear-gradient(90deg, rgba(61,91,255,0), #3D5BFF 28%, #B9C4FF 58%, #8A6BFF 76%, rgba(138,107,255,0)); filter: blur(2.2rem); opacity: .85"></div>
+<div class="streak" style="top: 49%; height: .4rem; transform: rotate(-21deg); background: linear-gradient(90deg, rgba(255,255,255,0), #9FB0FF 30%, #fff 60%, rgba(255,255,255,0)); filter: blur(1px)"></div>
+<div id="rail" class="f">
+  <div style="font-size: 1.5rem; color: #9FB0FF">333</div>
+  <div class="tab on">GRAIN<small>グレイン</small></div>
+  <div class="tab dimmer">CRYSTAL<small>クリスタル</small></div>
+  <div class="tab dimmer">HYBRID<small>ハイブリッド</small></div>
+  <div class="tab dimmer">VOCAL<small>ボーカル</small></div>
+</div>
+<div id="name" class="f skew">…</div><div id="sub" class="dim"></div>
+<div id="keybpm" class="f skew">A MINOR · 128</div>
+<canvas id="wave"></canvas>
+<div id="read" class="f dim"><span id="r1"></span><span id="r2"></span><span id="r3"></span></div>
+<div id="pet">
+  <svg viewBox="0 0 112 132" role="img" aria-label="Crystal pet"><defs><linearGradient id="pg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff"/><stop offset=".45" stop-color="#7C8CFF"/><stop offset="1" stop-color="#1A1F7A"/></linearGradient></defs>
+  <path d="M56 6C80 14 98 28 98 44v40c0 18-22 36-42 42-20-6-42-24-42-42V44C14 28 32 14 56 6z" fill="url(#pg)"/>
+  <g id="eyes" fill="none" stroke="#05050A" stroke-width="4" stroke-linecap="round"><path d="M36 78q6-6 12 0M64 78q6-6 12 0"/><path d="M50 94q6 5 12 0"/></g></svg>
+  <div id="mood" class="f skew">DREAM</div>
+</div>
+<div id="foot">
+  <div class="cap"><b>SOUND IN</b><span id="fin" class="dim"></span></div>
+  <div class="cap"><b>KEYS</b><span id="fmidi" class="dim"></span></div>
+  <div class="cap" style="flex: 2"><b>ENGINE</b><span id="finfo" class="dim"></span></div>
+  <div id="meter"><div><i id="mL"></i></div><div><i id="mR"></i></div></div>
+</div>
+<script src="ui.js"></script>
+<script>
+const cv = $("wave"), g = cv.getContext("2d"); let peaks = [], st = null, ver = -1, hist = [], mv = [0, 0];
+function refresh() {
+  st = getState(); if (!st) return;
+  if (st.version !== ver) { ver = st.version; peaks = (NC.peaks() || "").split(",").map(Number).filter(v => !isNaN(v)); }
+  $("name").textContent = st.live ? "LIVE INPUT" : st.sound; $("sub").textContent = st.live ? "ライブ · the last 20 seconds" : st.seconds.toFixed(2) + " s";
+  $("keybpm").textContent = st.key + " · " + st.bpm; $("mood").textContent = st.mood;
+  $("fin").textContent = !st.mic ? "microphone not allowed" : /input running/.test(st.info) ? "receiving" : "nothing coming in"; $("fmidi").textContent = st.midi || "none connected";
+  $("finfo").textContent = st.info.replace(/ · input.*/, "");
+}
+function frame() {
+  const dpr = devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight; if (cv.width !== Math.round(W * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+  g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
+  const s = NC.snap().split(",").map(Number), live = s[0] > 0.5, total = s[1] || 1, ws = s[3] || 0, wl = s[4] || 1, mid = H / 2, amp = H * 0.46;
+  let src = peaks;
+  if (live) { hist.push(Math.min(1, (s[8] || 0) * 1.5)); if (hist.length > 240) hist.shift(); src = hist; }
+  const n = src.length;
+  if (n > 1) {
+    const line = (a, b, color, width, glow) => { g.strokeStyle = color; g.lineWidth = width; g.shadowColor = "#9FB0FF"; g.shadowBlur = glow; for (const sign of [-1, 1]) { g.beginPath(); for (let i = Math.max(0, Math.floor(a * n)); i <= Math.min(n - 1, Math.ceil(b * n)); i++) { const x = i / (n - 1) * W, y = mid + sign * Math.max(1.5, src[i] * amp); if (i === Math.max(0, Math.floor(a * n))) g.moveTo(x, y); else g.lineTo(x, y); } g.stroke(); } g.shadowBlur = 0; };
+    line(0, 1, "#5F6BC8", 1.5, 0);
+    if (!live) { line(ws, ws + wl, "#FFFFFF", 3, 12);
+      g.strokeStyle = "#9FB0FF"; g.lineWidth = 1.5; for (const [x, bend] of [[ws * W, -8], [(ws + wl) * W, 8]]) { g.beginPath(); g.moveTo(x, 4); g.quadraticCurveTo(x + bend, mid, x, H - 4); g.stroke(); } }
+  }
+  // grains: points of light where each one is reading
+  const nd = s[45] || 0; g.shadowColor = "#B9C4FF";
+  for (let k = 0; k < nd; k++) { const x = s[46 + k * 3] * W, lv = Math.min(1, s[47 + k * 3] * 6), pan = s[48 + k * 3]; g.shadowBlur = 14; g.fillStyle = `rgba(255,255,255,${0.35 + 0.65 * lv})`; g.beginPath(); g.arc(x, mid + pan * amp * 0.7, 2 + 4 * lv, 0, 7); g.fill(); }
+  g.shadowBlur = 0;
+  if (!live) { const x = (s[2] || 0) * W; g.fillStyle = "#fff"; g.shadowBlur = 16; g.beginPath(); g.arc(x, mid, 5, 0, 7); g.fill(); g.shadowBlur = 0; }
+  const slice = total * wl; $("r1").textContent = live ? "LISTENING " + (s[10] || 0).toFixed(0) + " s" : "SLICE " + (slice < 1 ? Math.round(slice * 1000) + " ms" : slice.toFixed(2) + " s");
+  $("r2").textContent = live ? "" : "= " + (240 / Math.max(0.05, slice)).toFixed(1) + " BPM"; $("r3").textContent = (s[6] || 0) + " GRAINS";
+  const f = v => Math.max(0, Math.min(100, (20 * Math.log10(Math.max(1e-4, v)) + 48) / 48 * 100)); mv[0] = Math.max(f(s[15] || 0), mv[0] - 2.5); mv[1] = Math.max(f(s[16] || 0), mv[1] - 2.5); $("mL").style.width = mv[0] + "%"; $("mR").style.width = mv[1] + "%";
+  requestAnimationFrame(frame);
+}
+refresh(); setInterval(refresh, 200); requestAnimationFrame(frame);
+</script>
+</body></html>

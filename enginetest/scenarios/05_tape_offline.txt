@@ -1,0 +1,13 @@
+engine 1 9
+load
+set MIX 0.1
+set LENGTH 0.4
+set SCAN 0.9
+set PLAY 1
+set REV 1
+run 48000
+set POSITION 0.8
+set LENGTH 0.2
+set REV 0
+set PITCH 0.25
+run 96000

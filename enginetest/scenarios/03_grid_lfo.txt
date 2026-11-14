@@ -1,0 +1,13 @@
+engine 0 3
+load
+clock 128 0
+set GRID 4
+set PLAY 1
+set LENGTH 0.6
+set POSITION 0.5
+lfo 0 0 0.5 1 4 0.8 2 TONE 1 POSITION 0.6
+lfo 1 4 0.6 0 3 0.7 1 SPREAD 1
+lfo 2 5 0.4 0 3 0.9 1 SIZE 0.5
+keylock 1 0
+set SHATTER 0.8
+run 192000
