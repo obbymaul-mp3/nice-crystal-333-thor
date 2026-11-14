@@ -10,7 +10,7 @@ body { background: radial-gradient(ellipse at 78% 62%, #1B1F5E 0%, #07071A 45%, 
 #name { position: absolute; left: 13.6rem; top: 2.4rem; font-size: 4rem; letter-spacing: .4rem; color: #fff; text-shadow: 0 0 1.8rem rgba(140,150,255,.9); white-space: nowrap; }
 #sub { position: absolute; left: 13.6rem; top: 8.6rem; font-size: 1.5rem; letter-spacing: .3rem; }
 #keybpm { position: absolute; right: 3rem; top: 3.2rem; font-size: 2.2rem; color: #fff; text-align: right; }
-#wave { position: absolute; left: 13.6rem; top: 12.4rem; width: 62rem; height: 25rem; }
+#wave { touch-action: none; position: absolute; left: 13.6rem; top: 12.4rem; width: 62rem; height: 25rem; }
 #read { position: absolute; left: 13.6rem; top: 38.4rem; width: 62rem; display: flex; justify-content: space-between; font-size: 1.2rem; }
 #pet { position: absolute; left: 78.6rem; top: 12.6rem; width: 15rem; text-align: center; } #pet svg { width: 12rem; height: 14rem; } #mood { font-size: 1.5rem; letter-spacing: .3rem; margin-top: .6rem; }
 #foot { position: absolute; left: 13.6rem; right: 3rem; bottom: 2.4rem; height: 8rem; display: flex; align-items: center; gap: 1.2rem; }
@@ -50,8 +50,8 @@ function refresh() {
   st = getState(); if (!st) return;
   if (st.version !== ver) { ver = st.version; peaks = (NC.peaks() || "").split(",").map(Number).filter(v => !isNaN(v)); }
   $("name").textContent = st.live ? "LIVE INPUT" : st.sound; $("sub").textContent = st.live ? "ライブ · the last 20 seconds" : st.seconds.toFixed(2) + " s";
-  $("keybpm").textContent = st.key + " · " + st.bpm; $("mood").textContent = st.mood;
-  $("fin").textContent = !st.mic ? "microphone not allowed" : /input running/.test(st.info) ? "receiving" : "nothing coming in"; $("fmidi").textContent = st.midi || "none connected";
+  const hk = heardKey(st); $("keybpm").textContent = (hk ? NOTES[hk.root] + (hk.minor ? " MINOR" : " MAJOR") : st.live ? "LIVE" : "NO KEY") + " · " + st.bpm; $("mood").textContent = st.mood;
+  $("fin").textContent = !st.mic ? "microphone not allowed" : /input running/.test(st.info) ? "receiving" : "nothing coming in"; $("fmidi").textContent = st.midi || (st.usb ? st.usb : "nothing plugged in");
   $("finfo").textContent = st.info.replace(/ · input.*/, "");
 }
 function frame() {
@@ -77,6 +77,17 @@ function frame() {
   const f = v => Math.max(0, Math.min(100, (20 * Math.log10(Math.max(1e-4, v)) + 48) / 48 * 100)); mv[0] = Math.max(f(s[15] || 0), mv[0] - 2.5); mv[1] = Math.max(f(s[16] || 0), mv[1] - 2.5); $("mL").style.width = mv[0] + "%"; $("mR").style.width = mv[1] + "%";
   requestAnimationFrame(frame);
 }
+// touch the sound: slide left and right to move the slice, up and down to make it longer or shorter, double-tap for the whole sound
+let drag = null, lastTap = 0;
+cv.addEventListener("pointerdown", e => { cv.setPointerCapture(e.pointerId); const now = performance.now(); if (now - lastTap < 320) { NC.set(P.LENGTH, 1); NC.set(P.POSITION, 0); drag = null; lastTap = 0; return; } lastTap = now; drag = { y: e.clientY, len: st ? st.p[P.LENGTH] : 1 }; moveSlice(e); });
+cv.addEventListener("pointermove", e => { if (drag) moveSlice(e); });
+for (const ev of ["pointerup", "pointercancel"]) cv.addEventListener(ev, () => { drag = null; });
+function moveSlice(e) {
+  const r = cv.getBoundingClientRect(), len = Math.max(0, Math.min(1, drag.len + (drag.y - e.clientY) / r.height * 0.9)); NC.set(P.LENGTH, len);
+  const s = NC.snap().split(",").map(Number), wl = Math.min(0.999, s[4] || 1), x = (e.clientX - r.left) / r.width; NC.set(P.POSITION, Math.max(0, Math.min(1, (x - wl / 2) / (1 - wl))));
+}
+$("pet").addEventListener("pointerdown", () => { NC.pad("MOOD", true); setTimeout(refresh, 40); });
+$("name").addEventListener("pointerdown", () => { NC.sound(1); setTimeout(refresh, 200); });
 refresh(); setInterval(refresh, 200); requestAnimationFrame(frame);
 </script>
 </body></html>

@@ -28,8 +28,7 @@ class Audio : public oboe::AudioStreamDataCallback, public oboe::AudioStreamErro
   bool openOut() {
     oboe::AudioStreamBuilder b;
     b.setDirection(oboe::Direction::Output)->setPerformanceMode(oboe::PerformanceMode::LowLatency)->setSharingMode(oboe::SharingMode::Exclusive)
-        ->setFormat(oboe::AudioFormat::Float)->setChannelCount(2)->setSampleRate(48000)->setSampleRateConversionQuality(oboe::SampleRateConversionQuality::Medium)
-        ->setUsage(oboe::Usage::Media)->setContentType(oboe::ContentType::Music)->setDataCallback(this)->setErrorCallback(this);
+        ->setFormat(oboe::AudioFormat::Float)->setChannelCount(2)->setUsage(oboe::Usage::Game)->setDataCallback(this)->setErrorCallback(this);   // the device's own rate: asking for another one can cost the fast path
     const oboe::Result r = b.openStream(out);
     if (r != oboe::Result::OK) { LOGI("output failed: %s", oboe::convertToText(r)); return false; }
     out->setBufferSizeInFrames(out->getFramesPerBurst() * 2);
@@ -135,7 +134,7 @@ JNI(jfloatArray, snapshot)(JNIEnv* env, jobject) {
 JNI(jstring, info)(JNIEnv* env, jobject) {
   std::string t = "audio off";
   if (A.out) { char b[256]; const double ms = 1000.0 * A.out->getBufferSizeInFrames() / A.out->getSampleRate();
-    snprintf(b, sizeof b, "%d Hz · block %d · buffer %.0f ms · %s · input %s", A.out->getSampleRate(), A.out->getFramesPerBurst(), ms,
-             A.out->getAudioApi() == oboe::AudioApi::AAudio ? "AAudio" : "OpenSL", A.in ? (A.inFrames.load() > 0 ? "running" : "open, silent") : "off"); t = b; }
+    snprintf(b, sizeof b, "%d Hz · block %d · buffer %.0f ms · %s %s · input %s", A.out->getSampleRate(), A.out->getFramesPerBurst(), ms,
+             A.out->getPerformanceMode() == oboe::PerformanceMode::LowLatency ? "fast" : "slow path", A.out->getSharingMode() == oboe::SharingMode::Exclusive ? "exclusive" : "shared", A.in ? (A.inFrames.load() > 0 ? "running" : "open, silent") : "off"); t = b; }
   return env->NewStringUTF(t.c_str());
 }
