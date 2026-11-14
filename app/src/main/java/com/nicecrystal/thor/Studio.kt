@@ -81,7 +81,7 @@ object Studio {
         for (k in 0 until bins) { val a = (n.toLong() * k / bins).toInt(); val e = max(a + 1, (n.toLong() * (k + 1) / bins).toInt()); var pk = 0f; var i = a; while (i < e) { val v = max(abs(l[i]), abs(r[i])); if (v > pk) pk = v; i += 4 }; if (k > 0) sb.append(','); sb.append((pk * 1000).roundToInt() / 1000f) }
         return sb.toString()
     }
-    fun setLive(on: Boolean) { live = on; Native.setLive(on); if (on) Native.setParam(MIX, 1f); version++ }
+    fun goLive(on: Boolean) { live = on; Native.setLive(on); if (on) Native.setParam(MIX, 1f); version++ }
     fun grab() { if (live) Native.grab() }
 
     // ---- pads, throws, chaos
@@ -132,7 +132,7 @@ object Studio {
             KeyEvent.KEYCODE_BUTTON_L2 -> if (first) throwOn("FILTER") else if (!down) throwOff("FILTER")
             KeyEvent.KEYCODE_BUTTON_R2 -> if (first) throwOn("SPACE") else if (!down) throwOff("SPACE")
             KeyEvent.KEYCODE_BUTTON_START -> if (first) pad("MOOD", true)
-            KeyEvent.KEYCODE_BUTTON_SELECT -> if (first) setLive(!live)
+            KeyEvent.KEYCODE_BUTTON_SELECT -> if (first) goLive(!live)
             KeyEvent.KEYCODE_BUTTON_THUMBL -> if (first) loadSound(cur + 1)
             KeyEvent.KEYCODE_BUTTON_THUMBR -> if (first) grab()
             KeyEvent.KEYCODE_DPAD_LEFT -> if (down) dpad(-1, 0)

@@ -23,7 +23,7 @@ class Bridge {
     @JavascriptInterface fun pad(name: String, down: Boolean) = Studio.pad(name, down)
     @JavascriptInterface fun note(n: Int, down: Boolean) { if (down) Native.noteOn(n, 0.85f) else Native.noteOff(n) }
     @JavascriptInterface fun sound(step: Int) = Studio.loadSound(Studio.cur + step)
-    @JavascriptInterface fun live(on: Boolean) = Studio.setLive(on)
+    @JavascriptInterface fun live(on: Boolean) = Studio.goLive(on)
     @JavascriptInterface fun grab() = Studio.grab()
     @JavascriptInterface fun select(i: Int) { Studio.sel = i }
     @JavascriptInterface fun state(): String = Studio.state()
