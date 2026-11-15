@@ -22,7 +22,8 @@ class Audio : public oboe::AudioStreamDataCallback, public oboe::AudioStreamErro
   std::unique_ptr<GrainEngine> engine; std::unique_ptr<MasterBus> master;
   std::shared_ptr<oboe::AudioStream> out, in; std::atomic<oboe::AudioStream*> inLive{nullptr}; std::mutex ctl;   // ctl guards every call that is not the audio callback
   std::atomic<bool> wantInput{false}, running{false}; std::atomic<int> xruns{0}, inFrames{0};
-  float oL[CHUNK], oR[CHUNK], mL[CHUNK], mR[CHUNK], iL[CHUNK], iR[CHUNK]; std::vector<float> inBuf; int inCh = 0, inRate = 0;
+  float oL[CHUNK], oR[CHUNK], mL[CHUNK], mR[CHUNK], iL[CHUNK], iR[CHUNK]; std::vector<float> inBuf; int inCh = 0, inRate = 0; std::atomic<int> inDevice{0};
+  std::vector<float> recL, recR; std::atomic<int> recPos{0}; std::atomic<bool> recOn{false};   // RECORD: the raw input, up to a minute
   double sr = 48000; bool outI16 = false; const char* outName = "";
 
   // Three ways of asking for the output. The first that gives a small block wins; otherwise the smallest block does.
@@ -53,6 +54,7 @@ class Audio : public oboe::AudioStreamDataCallback, public oboe::AudioStreamErro
     b.setDirection(oboe::Direction::Input)->setPerformanceMode(oboe::PerformanceMode::LowLatency)->setSharingMode(oboe::SharingMode::Shared)
         ->setFormat(oboe::AudioFormat::Float)->setChannelCount(2)->setSampleRate(int(sr))->setSampleRateConversionQuality(oboe::SampleRateConversionQuality::Medium)
         ->setChannelConversionAllowed(true)->setFormatConversionAllowed(true)->setInputPreset(oboe::InputPreset::Unprocessed);
+    if (inDevice.load() > 0) b.setDeviceId(inDevice.load());   // a USB device chosen by the app, instead of whatever Android prefers
     std::shared_ptr<oboe::AudioStream> s; oboe::Result r = b.openStream(s);
     if (r != oboe::Result::OK) { b.setChannelCount(oboe::ChannelCount::Unspecified); r = b.openStream(s); }   // a multi-channel USB device: take it as it is and use its first two channels
     if (r != oboe::Result::OK) { LOGI("input failed: %s", oboe::convertToText(r)); return false; }
@@ -90,6 +92,7 @@ class Audio : public oboe::AudioStreamDataCallback, public oboe::AudioStreamErro
           auto av = is->getAvailableFrames(); if (av && av.value() > 6 * frames) is->read(inBuf.data(), std::min<int>(av.value() - 2 * frames, CHUNK * 4), 0);
         }
       }
+      if (haveIn && recOn.load(std::memory_order_relaxed)) { const int p = recPos.load(std::memory_order_relaxed), m = std::min(n, int(recL.size()) - p); if (m > 0) { std::memcpy(recL.data() + p, iL, m * sizeof(float)); std::memcpy(recR.data() + p, iR, m * sizeof(float)); recPos.store(p + m, std::memory_order_release); } }
       e->process(oL, oR, n, haveIn ? iL : nullptr, haveIn ? iR : nullptr);
       master->process(oL, oR, mL, mR, n);
       if (outI16) for (int i = 0; i < n; i++) { o16[2 * (done + i)] = int16_t(std::lrintf(std::fmax(-1.f, std::fmin(1.f, mL[i])) * 32767.f)); o16[2 * (done + i) + 1] = int16_t(std::lrintf(std::fmax(-1.f, std::fmin(1.f, mR[i])) * 32767.f)); }
@@ -113,7 +116,18 @@ Audio A;
 
 JNI(jboolean, start)(JNIEnv*, jobject) { return A.start(); }
 JNI(void, stop)(JNIEnv*, jobject) { A.stop(); }
-JNI(jboolean, openInput)(JNIEnv*, jobject) { A.wantInput = true; std::lock_guard<std::mutex> g(A.ctl); return A.running ? A.openIn() : true; }
+JNI(jboolean, openInput)(JNIEnv*, jobject, jint device) { A.wantInput = true; A.inDevice = device; std::lock_guard<std::mutex> g(A.ctl); return A.running ? A.openIn() : true; }
+JNI(jboolean, recStart)(JNIEnv*, jobject) {
+  std::lock_guard<std::mutex> g(A.ctl); if (A.recOn) return true; const size_t cap = size_t(A.sr * 60);
+  if (A.recL.size() != cap) { A.recL.assign(cap, 0.f); A.recR.assign(cap, 0.f); } A.recPos = 0; A.recOn = true; return true;
+}
+JNI(jfloat, recSeconds)(JNIEnv*, jobject) { return A.recOn ? float(A.recPos.load() / A.sr) : 0.f; }
+// what was recorded, left then right, or null if it was shorter than a quarter of a second
+JNI(jfloatArray, recStop)(JNIEnv* env, jobject) {
+  std::lock_guard<std::mutex> g(A.ctl); if (!A.recOn) return nullptr; A.recOn = false; std::this_thread::sleep_for(std::chrono::milliseconds(40));
+  const int n = A.recPos.load(); if (n < A.sr / 4) return nullptr;
+  jfloatArray a = env->NewFloatArray(n * 2); env->SetFloatArrayRegion(a, 0, n, A.recL.data()); env->SetFloatArrayRegion(a, n, n, A.recR.data()); return a;
+}
 JNI(void, setParam)(JNIEnv*, jobject, jint i, jfloat v) { ENG; A.engine->setParam(i, v); }
 JNI(jfloatArray, getParams)(JNIEnv* env, jobject) { jfloatArray a = env->NewFloatArray(GP_COUNT); if (A.engine) { float v[GP_COUNT]; for (int i = 0; i < GP_COUNT; i++) v[i] = A.engine->param(i); env->SetFloatArrayRegion(a, 0, GP_COUNT, v); } return a; }
 JNI(void, noteOn)(JNIEnv*, jobject, jint n, jfloat vel) { ENG; std::lock_guard<std::mutex> g(A.ctl); A.engine->noteOn(n, vel); }

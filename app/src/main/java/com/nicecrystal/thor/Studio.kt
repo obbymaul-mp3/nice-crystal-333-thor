@@ -50,7 +50,33 @@ object Studio {
     }
     fun shown() { visible++; if (visible == 1 && booted) Native.start() }
     fun hidden() { visible = max(0, visible - 1); if (visible == 0) { Native.setParam(PLAY, 0f); Native.allOff(); main.postDelayed({ if (visible == 0) Native.stop() }, 400) } }
-    fun micGranted() { micOk = true; Native.openInput() }
+    fun micGranted() { micOk = true; pickInput() }
+    @Volatile var inputName = "built-in microphone"; @Volatile var usbInput = false; @Volatile var recording = false
+    private var lastInput = -1
+    /** A USB audio device (the FM-1) beats the built-in microphone. Called again every two seconds, so plugging in is enough. */
+    private fun pickInput() {
+        if (!micOk) return
+        try {
+            val am = app?.getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager ?: return
+            val usb = am.getDevices(android.media.AudioManager.GET_DEVICES_INPUTS).firstOrNull { it.type == android.media.AudioDeviceInfo.TYPE_USB_DEVICE || it.type == android.media.AudioDeviceInfo.TYPE_USB_HEADSET }
+            val id = usb?.id ?: 0; usbInput = usb != null
+            val label = usb?.productName?.toString() ?: ""
+            inputName = if (usb == null) "built-in microphone" else if (label.isBlank()) "USB audio" else label
+            if (id != lastInput) { lastInput = id; Thread { Native.openInput(id); if (live) Native.setParam(MIX, if (usbInput) 0.55f else 1f) }.start() }
+        } catch (e: Exception) { android.util.Log.e("NiceCrystal", "input", e) }
+    }
+    /** RECORD: tap to start (turns LIVE on), tap again to stop. What came in becomes the sound, ready to mess with. */
+    fun rec() {
+        if (!recording) { if (!live) goLive(true); recording = Native.recStart(); return }
+        recording = false
+        Thread {
+            val g = Native.recStop() ?: return@Thread; val n = g.size / 2
+            val s = Sound("TAKE " + SimpleDateFormat("HH.mm.ss", Locale.US).format(Date()), null)
+            s.l = g.copyOfRange(0, n); s.r = g.copyOfRange(n, 2 * n); s.seconds = n / 48000f; s.peaks = peaksOf(s.l!!, s.r!!, 480); detectKey(s)
+            sounds.add(0, s); cur = 0; live = false; Native.setLive(false); Native.loadSample(s.l!!, s.r!!, 48000)
+            Native.setParam(MIX, 0.5f); Native.setParam(POSITION, 0f); Native.setParam(LENGTH, 1f); Native.setParam(PLAY, 1f); version++
+        }.start()
+    }
 
     // ---- sounds
     fun loadSound(i: Int) {
@@ -107,7 +133,8 @@ object Studio {
         for (root in 0 until 12) for (m in 0..1) { val c = corr(if (m == 1) min else maj, root); if (c > best) { second = best; best = c; s.keyRoot = root; s.keyMinor = m == 1 } else if (c > second) second = c }
         if (best < 0.45) s.keyRoot = -1   // drums and noise: no clear key
     }
-    fun goLive(on: Boolean) { live = on; Native.setLive(on); if (on) Native.setParam(MIX, 1f); version++ }
+    // with a USB device you hear what comes in as well as the grains; with the microphone only the grains, or it would howl
+    fun goLive(on: Boolean) { if (!on && recording) { rec(); return }; live = on; Native.setLive(on); if (on) Native.setParam(MIX, if (usbInput) 0.55f else 1f); version++ }
     fun grab() { if (live) Native.grab() }
 
     // ---- pads, throws, chaos
@@ -196,11 +223,12 @@ object Studio {
                     if (rx != 0f) { if (!pitching) { pitching = true; pitchF = (p[PITCH] - 0.5f) * 48f }; pitchF = (pitchF + rx * dt * 14f).coerceIn(-24f, 24f); set(PITCH, 0.5f + pitchF.roundToInt() / 48f) }
                 }
                 if (rx == 0f) pitching = false
-                if (ticks % 120 == 60) scanDevices()
+                if (ticks % 120 == 60) { scanDevices(); pickInput() }
+                if (recording && Native.recSeconds() > 59.5f) rec()
                 if (++ticks % 12 == 0) Native.takeGrab()?.let { g ->
                     val n = g.size / 2; val s = Sound("GRAB " + SimpleDateFormat("HH.mm.ss", Locale.US).format(Date()), null)
                     s.l = g.copyOfRange(0, n); s.r = g.copyOfRange(n, 2 * n); s.seconds = n / 48000f; s.peaks = peaksOf(s.l!!, s.r!!, 480); Thread { detectKey(s); version++ }.start()
-                    sounds.add(0, s); cur = 0; live = false; version++
+                    sounds.add(0, s); cur = 0; live = false; Native.setParam(MIX, 0.5f); Native.setParam(PLAY, 1f); version++
                 }
             }
             main.postDelayed(this, 16)
@@ -262,7 +290,7 @@ object Studio {
         val p = Native.getParams(); val s = sounds[cur]; val sb = StringBuilder(640)
         sb.append("{\"sound\":\"").append(s.name.replace("\"", "'")).append("\",\"seconds\":").append(s.seconds).append(",\"live\":").append(live)
             .append(",\"mood\":\"").append(moods[mood]).append("\",\"sel\":").append(sel).append(",\"version\":").append(version).append(",\"bpm\":").append(bpm.toInt())
-            .append(",\"keyRoot\":").append(if (live) -1 else s.keyRoot).append(",\"keyMinor\":").append(s.keyMinor).append(",\"usb\":\"").append(usbSeen.replace("\"", "'")).append("\",\"midiCount\":").append(midiCount).append(",\"midiLast\":\"").append(midiLast).append("\",\"midi\":\"").append(midiName.replace("\"", "'")).append("\",\"mic\":").append(micOk)
+            .append(",\"keyRoot\":").append(if (live) -1 else s.keyRoot).append(",\"keyMinor\":").append(s.keyMinor).append(",\"usb\":\"").append(usbSeen.replace("\"", "'")).append("\",\"midiCount\":").append(midiCount).append(",\"midiLast\":\"").append(midiLast).append("\",\"midi\":\"").append(midiName.replace("\"", "'")).append("\",\"mic\":").append(micOk).append(",\"input\":\"").append(inputName.replace("\"", "'")).append("\",\"rec\":").append(recording).append(",\"recSec\":").append(if (recording) Native.recSeconds() else 0f)
             .append(",\"info\":\"").append(Native.info().replace("\"", "'")).append("\",\"throws\":\"").append(heldThrows()).append("\",\"p\":[")
         for (i in p.indices) { if (i > 0) sb.append(','); sb.append(p[i]) }
         return sb.append("]}").toString()

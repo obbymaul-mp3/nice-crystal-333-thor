@@ -49,10 +49,10 @@ const cv = $("wave"), g = cv.getContext("2d"); let peaks = [], st = null, ver = 
 function refresh() {
   st = getState(); if (!st) return;
   if (st.version !== ver) { ver = st.version; peaks = (NC.peaks() || "").split(",").map(Number).filter(v => !isNaN(v)); }
-  $("name").textContent = st.live ? "LIVE INPUT" : st.sound; $("sub").textContent = st.live ? "ライブ · the last 20 seconds" : st.seconds.toFixed(2) + " s";
+  const mmss = t => Math.floor(t / 60) + ":" + String(Math.floor(t % 60)).padStart(2, "0"); $("name").textContent = st.rec ? "RECORDING " + mmss(st.recSec) : st.live ? "LIVE INPUT" : st.sound; $("name").style.color = st.rec ? "#FF8AA0" : "#fff"; $("sub").textContent = st.rec ? "レコーディング · up to one minute" : st.live ? "ライブ" : st.seconds.toFixed(2) + " s";
   const hk = heardKey(st); $("keybpm").textContent = (hk ? NOTES[hk.root] + (hk.minor ? " MINOR" : " MAJOR") : st.live ? "LIVE" : "NO KEY") + " · " + st.bpm; $("mood").textContent = st.mood;
   $("fin").textContent = !st.mic ? "microphone not allowed" : /input running/.test(st.info) ? "receiving" : "nothing coming in"; $("fmidi").textContent = st.midi ? st.midi + (st.midiCount ? " · " + st.midiCount + " messages · last " + st.midiLast : " · connected, nothing received yet") : (st.usb ? st.usb : "nothing plugged in");
-  $("finfo").textContent = st.info.replace(/ · input.*/, ""); const im = / · input (.*)/.exec(st.info); if (st.mic && im) $("fin").textContent = (/running/.test(im[1]) ? "receiving" : "nothing coming in") + im[1].replace(/running|open, silent|off/, "");
+  $("finfo").textContent = st.info.replace(/ · input.*/, ""); const im = / · input (.*)/.exec(st.info); if (st.mic && im) $("fin").textContent = st.input + " · " + (/running/.test(im[1]) ? "receiving" : "silent") + im[1].replace(/running|open, silent|off/, "");
 }
 function frame() {
   const dpr = devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight; if (cv.width !== Math.round(W * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }

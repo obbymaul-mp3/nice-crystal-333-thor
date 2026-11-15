@@ -5,7 +5,10 @@ object Native {
     init { System.loadLibrary("nc333") }
     external fun start(): Boolean
     external fun stop()
-    external fun openInput(): Boolean
+    external fun openInput(device: Int): Boolean
+    external fun recStart(): Boolean
+    external fun recStop(): FloatArray?
+    external fun recSeconds(): Float
     external fun setParam(i: Int, v: Float)
     external fun getParams(): FloatArray
     external fun noteOn(n: Int, vel: Float)

@@ -25,6 +25,7 @@ class Bridge {
     @JavascriptInterface fun sound(step: Int) = Studio.loadSound(Studio.cur + step)
     @JavascriptInterface fun live(on: Boolean) = Studio.goLive(on)
     @JavascriptInterface fun grab() = Studio.grab()
+    @JavascriptInterface fun rec() = Studio.rec()
     @JavascriptInterface fun select(i: Int) { Studio.sel = i }
     @JavascriptInterface fun state(): String = Studio.state()
     @JavascriptInterface fun peaks(): String = Studio.peaks()
