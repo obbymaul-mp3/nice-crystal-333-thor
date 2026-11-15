@@ -89,6 +89,6 @@ function paint() {
   const held = (st.throws || "").split(","); for (const b of document.querySelectorAll("[data-throw]")) if (!b._on) b.classList.toggle("on", held.includes(b.dataset.throw));
 }
 function poll() { const s = getState(); if (!s) return; if (dragging.xy) { s.p[P.POSITION] = st.p[P.POSITION]; s.p[P.SIZE] = st.p[P.SIZE]; } SL.forEach(([, idx], k) => { if (dragging["s" + k]) { s.p[idx] = st.p[idx]; s.sel = st.sel; } }); st = s; paint(); }
-poll(); setInterval(poll, 66);
+poll(); setInterval(poll, 66); watchRoom(true, "bottom");
 </script>
 </body></html>

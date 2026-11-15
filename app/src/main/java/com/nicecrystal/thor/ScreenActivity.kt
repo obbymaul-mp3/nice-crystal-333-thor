@@ -14,7 +14,10 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.webkit.JavascriptInterface
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
+import android.webkit.WebViewClient
 import java.lang.ref.WeakReference
 
 /** What the pages call. The names match the `NC.` calls in assets/ui. */
@@ -27,6 +30,21 @@ class Bridge {
     @JavascriptInterface fun grab() = Studio.grab()
     @JavascriptInterface fun rec() = Studio.rec()
     @JavascriptInterface fun add() = Studio.pickFile()
+    @JavascriptInterface fun room(name: String) = Studio.enter(name)
+    @JavascriptInterface fun bpm(v: Double) { Studio.bpm = v.coerceIn(40.0, 240.0); Native.setClock(Studio.bpm) }
+    @JavascriptInterface fun resBegin() = Studio.resBegin()
+    @JavascriptInterface fun resChunk(b64: String) = Studio.resChunk(b64)
+    @JavascriptInterface fun resEnd(name: String, bars: Int) = Studio.resEnd(name, bars)
+    @JavascriptInterface fun hear(on: Boolean) = Studio.hear(on)
+    @JavascriptInterface fun keep() = Studio.keepResult()
+    @JavascriptInterface fun toDeck() = Studio.toDeck()
+    @JavascriptInterface fun deckToggle() = Studio.deckToggle()
+    @JavascriptInterface fun deckRemove(i: Int) = Studio.deckRemove(i)
+    @JavascriptInterface fun outRec() = Studio.outRec()
+    @JavascriptInterface fun say(t: String) = Studio.note(t)
+    @JavascriptInterface fun share(t: String) { Studio.share = t }
+    @JavascriptInterface fun resultPeaks(): String = Studio.resultPeaks()
+    @JavascriptInterface fun phases(): String = Native.loopPhases().joinToString(",")
     @JavascriptInterface fun remove() = Studio.removeCurrent()
     @JavascriptInterface fun select(i: Int) { Studio.sel = i }
     @JavascriptInterface fun state(): String = Studio.state()
@@ -48,9 +66,24 @@ open class ScreenActivity : Activity() {
         web.settings.javaScriptEnabled = true; web.settings.domStorageEnabled = true
         web.setBackgroundColor(0xFF05050A.toInt()); web.overScrollMode = View.OVER_SCROLL_NEVER
         web.addJavascriptInterface(Bridge(), "NC")
+        // the pages are served from the app's own files under one address, so they can use workers and fetch sounds
+        web.webViewClient = object : WebViewClient() {
+            override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
+                val u = request.url; if (u.host != "nc.local") return null; val path = u.path ?: return null
+                return try {
+                    if (path.startsWith("/sound/")) {
+                        val bytes = Studio.soundBytes(path.removePrefix("/sound/").toInt()) ?: return WebResourceResponse("text/plain", "utf-8", 404, "Not found", emptyMap(), java.io.ByteArrayInputStream(ByteArray(0)))
+                        WebResourceResponse("application/octet-stream", null, java.io.ByteArrayInputStream(bytes))
+                    } else {
+                        val name = path.removePrefix("/"); val mime = when (name.substringAfterLast('.')) { "html" -> "text/html"; "js" -> "application/javascript"; "css" -> "text/css"; "ttf" -> "font/ttf"; else -> "application/octet-stream" }
+                        WebResourceResponse(mime, if (mime.startsWith("text") || mime.endsWith("javascript")) "utf-8" else null, assets.open(name))
+                    }
+                } catch (e: Exception) { WebResourceResponse("text/plain", "utf-8", 404, "Not found", emptyMap(), java.io.ByteArrayInputStream(ByteArray(0))) }
+            }
+        }
         setContentView(web)
         Studio.boot(this)
-        web.loadUrl("file:///android_asset/ui/$page.html")
+        web.loadUrl("https://nc.local/ui/$page.html")
     }
     /** Called on the screen the app was launched on. Returns the page for this screen. */
     protected open fun choosePage(): String = "single"

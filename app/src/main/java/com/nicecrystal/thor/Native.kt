@@ -9,6 +9,16 @@ object Native {
     external fun recStart(): Boolean
     external fun recStop(): FloatArray?
     external fun recSeconds(): Float
+    external fun loopSet(slot: Int, l: FloatArray, r: FloatArray)
+    external fun loopClear(slot: Int)
+    external fun loopPlay(slot: Int, on: Boolean)
+    external fun loopGain(slot: Int, v: Float)
+    external fun deckPlay(on: Boolean)
+    external fun loopPhases(): FloatArray
+    external fun setGrainGate(on: Boolean)
+    external fun outRecStart(): Boolean
+    external fun outRecSeconds(): Float
+    external fun outRecStop(): ShortArray?
     external fun setParam(i: Int, v: Float)
     external fun getParams(): FloatArray
     external fun noteOn(n: Int, vel: Float)

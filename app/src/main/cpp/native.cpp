@@ -23,7 +23,17 @@ class Audio : public oboe::AudioStreamDataCallback, public oboe::AudioStreamErro
   std::shared_ptr<oboe::AudioStream> out, in; std::atomic<oboe::AudioStream*> inLive{nullptr}; std::mutex ctl;   // ctl guards every call that is not the audio callback
   std::atomic<bool> wantInput{false}, running{false}; std::atomic<int> xruns{0}, inFrames{0};
   float oL[CHUNK], oR[CHUNK], mL[CHUNK], mR[CHUNK], iL[CHUNK], iR[CHUNK]; std::vector<float> inBuf; int inCh = 0, inRate = 0; std::atomic<int> inDevice{0};
-  std::vector<float> recL, recR; std::atomic<int> recPos{0}; std::atomic<bool> recOn{false};   // RECORD: the raw input, up to a minute
+  std::vector<float> recL, recR; std::atomic<int> recPos{0}; std::atomic<bool> recOn{false};
+  // loops: slot 0 is the room's preview, 1..8 are the deck. All read the same running clock, so they stay in step.
+  struct Loop { std::atomic<Sample*> s{nullptr}; std::atomic<float> gain{1}; std::atomic<bool> on{false}; std::atomic<int64_t> t0{0}; double g = 0; };
+  Loop loops[9]; std::atomic<int64_t> clk{0}, deckT0{0}; std::vector<std::pair<Sample*, std::chrono::steady_clock::time_point>> grave;
+  std::atomic<float> grainGate{1}; double gg = 1;
+  std::vector<int16_t> orec; std::atomic<int> orecPos{0}; std::atomic<bool> orecOn{false};   // REC OUT: everything you hear, up to five minutes
+  void bury(Sample* old) {   // the audio thread may still be reading it: delete a couple of seconds later
+    const auto now = std::chrono::steady_clock::now(); if (old) grave.push_back({old, now});
+    for (size_t i = 0; i < grave.size();) { if (now - grave[i].second > std::chrono::seconds(2)) { delete grave[i].first; grave.erase(grave.begin() + i); } else i++; }
+  }
+  bool deckRunning() const { for (int i = 1; i < 9; i++) if (loops[i].on.load()) return true; return false; }   // RECORD: the raw input, up to a minute
   double sr = 48000; bool outI16 = false; const char* outName = "";
 
   // Three ways of asking for the output. The first that gives a small block wins; otherwise the smallest block does.
@@ -94,7 +104,17 @@ class Audio : public oboe::AudioStreamDataCallback, public oboe::AudioStreamErro
       }
       if (haveIn && recOn.load(std::memory_order_relaxed)) { const int p = recPos.load(std::memory_order_relaxed), m = std::min(n, int(recL.size()) - p); if (m > 0) { std::memcpy(recL.data() + p, iL, m * sizeof(float)); std::memcpy(recR.data() + p, iR, m * sizeof(float)); recPos.store(p + m, std::memory_order_release); } }
       e->process(oL, oR, n, haveIn ? iL : nullptr, haveIn ? iR : nullptr);
+      { const double tg = grainGate.load(std::memory_order_relaxed); if (gg != tg || tg != 1) for (int i = 0; i < n; i++) { gg += (tg - gg) * 0.002; oL[i] = float(oL[i] * gg); oR[i] = float(oR[i] * gg); } }
+      const int64_t now = clk.load(std::memory_order_relaxed);
+      for (auto& lp : loops) {
+        const Sample* sm = lp.s.load(std::memory_order_acquire); const double tg = lp.on.load(std::memory_order_relaxed) ? lp.gain.load(std::memory_order_relaxed) : 0.0;
+        if (!sm || sm->n() < 2 || (tg == 0 && lp.g < 1e-4)) { lp.g = tg == 0 ? 0 : lp.g; continue; }
+        const int len = sm->n(); int64_t ph = (now - lp.t0.load(std::memory_order_relaxed)) % len; if (ph < 0) ph += len; const float* L = sm->L.data(); const float* R = sm->R.data();
+        for (int i = 0; i < n; i++) { lp.g += (tg - lp.g) * 0.003; oL[i] += float(L[ph] * lp.g); oR[i] += float(R[ph] * lp.g); if (++ph >= len) ph = 0; }
+      }
+      clk.store(now + n, std::memory_order_relaxed);
       master->process(oL, oR, mL, mR, n);
+      if (orecOn.load(std::memory_order_relaxed)) { const int p = orecPos.load(std::memory_order_relaxed), m = std::min(n, int(orec.size() / 2) - p); for (int i = 0; i < m; i++) { orec[2 * (p + i)] = int16_t(std::lrintf(std::fmax(-1.f, std::fmin(1.f, mL[i])) * 32767.f)); orec[2 * (p + i) + 1] = int16_t(std::lrintf(std::fmax(-1.f, std::fmin(1.f, mR[i])) * 32767.f)); } if (m > 0) orecPos.store(p + m, std::memory_order_release); }
       if (outI16) for (int i = 0; i < n; i++) { o16[2 * (done + i)] = int16_t(std::lrintf(std::fmax(-1.f, std::fmin(1.f, mL[i])) * 32767.f)); o16[2 * (done + i) + 1] = int16_t(std::lrintf(std::fmax(-1.f, std::fmin(1.f, mR[i])) * 32767.f)); }
       else for (int i = 0; i < n; i++) { o[2 * (done + i)] = mL[i]; o[2 * (done + i) + 1] = mR[i]; }
       done += n;
@@ -166,4 +186,39 @@ JNI(jstring, info)(JNIEnv* env, jobject) {
              A.out->getPerformanceMode() == oboe::PerformanceMode::LowLatency ? "fast" : "slow path", A.outName, A.in ? (A.inFrames.load() > 0 ? "running" : "open, silent") : "off"); t = b;
     if (A.in) { snprintf(b, sizeof b, " %d ch %d Hz", A.inCh, A.inRate); t += b; } }
   return env->NewStringUTF(t.c_str());
+}
+
+// ---- loops (preview and deck), the room gate, and recording the output
+JNI(void, loopSet)(JNIEnv* env, jobject, jint slot, jfloatArray l, jfloatArray r) {
+  if (slot < 0 || slot > 8) return; const jsize n = env->GetArrayLength(l); auto* sm = new Sample(); sm->rate = A.sr; sm->L.resize(n); sm->R.resize(n);
+  env->GetFloatArrayRegion(l, 0, n, sm->L.data()); env->GetFloatArrayRegion(r, 0, std::min(n, env->GetArrayLength(r)), sm->R.data());
+  std::lock_guard<std::mutex> g(A.ctl); A.bury(A.loops[slot].s.exchange(sm));
+}
+JNI(void, loopClear)(JNIEnv*, jobject, jint slot) { if (slot < 0 || slot > 8) return; std::lock_guard<std::mutex> g(A.ctl); A.loops[slot].on = false; A.bury(A.loops[slot].s.exchange(nullptr)); }
+// a loop that starts while the deck is running joins it in step
+JNI(void, loopPlay)(JNIEnv*, jobject, jint slot, jboolean on) {
+  if (slot < 0 || slot > 8) return; std::lock_guard<std::mutex> g(A.ctl);
+  if (on && !A.loops[slot].on) A.loops[slot].t0 = A.deckRunning() ? A.deckT0.load() : A.clk.load();
+  A.loops[slot].on = on;
+}
+JNI(void, loopGain)(JNIEnv*, jobject, jint slot, jfloat v) { if (slot >= 0 && slot <= 8) A.loops[slot].gain = v; }
+JNI(void, deckPlay)(JNIEnv*, jobject, jboolean on) {
+  std::lock_guard<std::mutex> g(A.ctl); if (on && !A.deckRunning()) A.deckT0 = A.clk.load();
+  for (int i = 1; i < 9; i++) { if (on && A.loops[i].s.load()) { A.loops[i].t0 = A.deckT0.load(); A.loops[i].on = true; } else A.loops[i].on = false; }
+}
+// where each loop is, 0..1, or -1 when it is not playing: [preview, lane 1 .. lane 8]
+JNI(jfloatArray, loopPhases)(JNIEnv* env, jobject) {
+  float v[9]; const int64_t now = A.clk.load();
+  for (int i = 0; i < 9; i++) { const Sample* sm = A.loops[i].s.load(); if (!sm || !A.loops[i].on.load() || sm->n() < 2) { v[i] = -1; continue; } int64_t ph = (now - A.loops[i].t0.load()) % sm->n(); if (ph < 0) ph += sm->n(); v[i] = float(double(ph) / sm->n()); }
+  jfloatArray a = env->NewFloatArray(9); env->SetFloatArrayRegion(a, 0, 9, v); return a;
+}
+JNI(void, setGrainGate)(JNIEnv*, jobject, jboolean on) { A.grainGate = on ? 1.f : 0.f; }
+JNI(jboolean, outRecStart)(JNIEnv*, jobject) {
+  std::lock_guard<std::mutex> g(A.ctl); if (A.orecOn) return true; const size_t cap = size_t(A.sr) * 300 * 2;
+  if (A.orec.size() != cap) A.orec.assign(cap, 0); A.orecPos = 0; A.orecOn = true; return true;
+}
+JNI(jfloat, outRecSeconds)(JNIEnv*, jobject) { return A.orecOn ? float(A.orecPos.load() / A.sr) : 0.f; }
+JNI(jshortArray, outRecStop)(JNIEnv* env, jobject) {
+  std::lock_guard<std::mutex> g(A.ctl); if (!A.orecOn) return nullptr; A.orecOn = false; std::this_thread::sleep_for(std::chrono::milliseconds(40));
+  const int n = A.orecPos.load() * 2; if (n < A.sr / 2) return nullptr; jshortArray a = env->NewShortArray(n); env->SetShortArrayRegion(a, 0, n, A.orec.data()); return a;
 }

@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Nice Crystal 333 controls</title><link rel="stylesheet" href="ui.css">
+<style>
+html { font-size: calc(100vw / 62); }
+body { background: radial-gradient(ellipse at 24% 30%, #161A52 0%, #07071A 50%, #020206 100%); display: flex; gap: 1.4rem; padding: 1.6rem; }
+#left { width: 27.6rem; display: flex; flex-direction: column; gap: .9rem; } #right { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1rem; }
+.lab { font-size: 1rem; color: #C9D1FF; padding-left: .8rem; }
+.srcrow { display: flex; gap: .6rem; height: 5rem; } .srcrow button { font-size: 1.5rem; width: 4.4rem; } .srcrow .nm { flex: 1; min-width: 0; padding: 0 1.4rem; display: flex; flex-direction: column; justify-content: center; }
+.srcrow .nm b { font-family: Michroma; font-weight: 400; font-size: 1.15rem; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .srcrow .nm span { font-size: 1.1rem; color: #C9D1FF; }
+.chips { display: flex; gap: .5rem; flex-wrap: wrap; } .chips button { flex: 1 1 auto; height: 4.4rem; padding: 0 1rem; font-size: 1.05rem; }
+#bpmrow { display: flex; gap: .6rem; height: 4.6rem; align-items: stretch; } #bpmrow button { width: 4.6rem; font-size: 1.6rem; } #bpmv { flex: 1; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; color: #fff; }
+#keep { height: 5rem; font-size: 1.2rem; } #spacer { flex: 1; }
+#pads { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; } #pads button { height: 6.6rem; border-radius: 3.3rem; text-align: left; padding: 0 2.2rem; color: #fff; } #pads b { display: block; font-family: Michroma; font-weight: 400; font-size: 1.25rem; } #pads small { display: block; font-size: 1.2rem; font-weight: 700; margin-top: .2rem; }
+#pads .a { background: linear-gradient(180deg, #fff, #B9C4FF); color: #05050A; box-shadow: 0 0 2.6rem rgba(185,196,255,.8); } #pads .a.busy { filter: saturate(.3) brightness(.7); }
+#pads .b { background: rgba(61,91,255,.14); box-shadow: inset 0 0 0 1px #7C8CFF; } #pads .b.on { background: rgba(61,91,255,.6); box-shadow: inset 0 0 0 1px #B9C4FF, 0 0 2.6rem rgba(61,91,255,.9); }
+#pads .x { background: rgba(138,107,255,.14); box-shadow: inset 0 0 0 1px #A892FF; } #pads .x.on { background: rgba(138,107,255,.6); box-shadow: inset 0 0 0 1px #D0C4FF, 0 0 2.6rem rgba(138,107,255,.9); }
+#pads .y { background: rgba(10,10,30,.8); box-shadow: inset 0 0 0 1px #E8EAF6; } #pads button.down { filter: brightness(1.5); }
+#pg { display: flex; gap: .5rem; height: 3.4rem; } #pg button { flex: 1; font-size: 1rem; }
+#sl { flex: 1; display: flex; flex-direction: column; justify-content: space-around; padding: 0 .8rem; min-height: 0; }
+.s { padding: .2rem 0; } .s .h { display: flex; justify-content: space-between; align-items: baseline; font-size: 1.1rem; } .s .h b { font-weight: 400; font-size: 1.3rem; color: #fff; } .s.sel .h span { color: #fff; text-shadow: 0 0 1rem #9FB0FF; }
+.s .t { position: relative; height: .4rem; margin: 1rem 0 .8rem; border-radius: .2rem; background: #2A2F66; } .s .t i { position: absolute; left: 0; top: 0; height: 100%; border-radius: .2rem; background: linear-gradient(90deg, #3D5BFF, #fff); box-shadow: 0 0 1rem #7C8CFF; } .s .t u { position: absolute; top: -.9rem; width: 2.2rem; height: 2.2rem; margin-left: -1.1rem; border-radius: 50%; background: radial-gradient(circle, #fff, #7C8CFF); box-shadow: 0 0 1.6rem #7C8CFF; }
+</style></head>
+<body>
+<div id="left" class="f">
+  <div class="lab" id="la">SOUND</div>
+  <div class="srcrow"><button class="cap" id="a-" aria-label="Previous sound">‹</button><div class="cap nm"><b id="an">…</b><span id="ak"></span></div><button class="cap" id="a+" aria-label="Next sound">›</button></div>
+  <div class="lab" id="lb">SECOND SOUND</div>
+  <div class="srcrow" id="brow"><button class="cap" id="b-" aria-label="Previous second sound">‹</button><div class="cap nm"><b id="bn">…</b><span id="bk"></span></div><button class="cap" id="b+" aria-label="Next second sound">›</button></div>
+  <div class="chips" id="modes"></div>
+  <div class="chips" id="bars"></div>
+  <div id="bpmrow"><button class="cap" id="t-" aria-label="Slower">−</button><div class="cap" id="bpmv"></div><button class="cap" id="t+" aria-label="Faster">+</button></div>
+  <div id="spacer"></div>
+  <button class="cap" id="keep">KEEP AS A SOUND</button>
+</div>
+<div id="right">
+  <div id="pads">
+    <button class="a" id="pa"><b></b><small></small></button><button class="b" id="pb"><b>HEAR</b><small>play it · B</small></button>
+    <button class="x" id="px"><b></b><small></small></button><button class="y" id="py"><b>TO DECK</b><small>stack it · Y</small></button>
+  </div>
+  <div id="pg" class="f"></div>
+  <div id="sl" class="f"></div>
+  <div class="chips f" id="extra"></div>
+</div>
+<script src="ui.js"></script>
+<script>
+// ---------------------------------------------------------------- what each room offers
+const pc = v => Math.round(v * 100) + "%", bi = v => Math.abs(v) < 0.02 ? "AS MADE" : (v > 0 ? "+" : "−") + Math.round(Math.abs(v) * 100), db = v => Math.abs(v) < 0.1 ? "0 dB" : (v > 0 ? "+" : "−") + Math.abs(v).toFixed(1) + " dB";
+const FIN = () => ({ lowcut: 20, bass: 0, sub: 0, mono: false, presence: 0, air: 0, punch: 0, width: 1 });
+const LAYER = () => ({ cut: 0, res: 0, size: 0, gatk: 0, gbody: 0, space: 1, drive: 1, level: 1, mute: false, env: { rate: -1, a: 0.004, d: 0.18, s: 0 } });
+const FINPAGE = pre => ["FINISH", [["BASS", pre + "bass", -12, 12, db], ["PRESENCE", pre + "presence", -9, 9, db], ["AIR", pre + "air", -9, 9, db], ["WIDTH", pre + "width", 0, 2, pc]]];
+const CFG = {
+  crystal: { make: ["CRYSTALLISE", "a new loop · A"], alt: ["DEEPER", "stranger · X"], two: false, bars: [4, 8],
+    fresh: () => ({ bars: 8, seed: 1, depth: 1, layers: [], sculpt: { all: Object.assign(LAYER(), { env: { rate: 0, a: 0.004, d: 0.18, s: 0 } }), layers: [], master: FIN() } }),
+    pages: [["TONE", [["CUTOFF", "sculpt.all.cut", -1, 1, bi], ["RESONANCE", "sculpt.all.res", 0, 1, pc], ["GRAIN SIZE", "sculpt.all.size", -1, 1, bi], ["SPACE", "sculpt.all.space", 0, 2, pc]]],
+            ["BODY", [["ATTACK", "sculpt.all.gatk", -1, 1, bi], ["BODY", "sculpt.all.gbody", -1, 1, bi], ["DRIVE", "sculpt.all.drive", 0, 2, pc], ["LEVEL", "sculpt.all.level", 0, 2, pc]]], FINPAGE("sculpt.master.")] },
+  beat: { make: ["BREED", "a new beat · A"], alt: ["SAMPLE MASH", "other mode · X"], two: true, bars: [1, 2, 4],
+    fresh: () => ({ bars: 2, seed: 1, blend: 0.5, swing: 0.15, wild: 0.2, tight: 0, glue: 0.2, finish: FIN() }),
+    pages: [["BABY", [["BLEND A to B", "blend", 0, 1, v => Math.round((1 - v) * 100) + " / " + Math.round(v * 100)], ["SWING", "swing", 0, 0.6, pc], ["WILD", "wild", 0, 1, pc], ["TIGHT", "tight", 0, 1, pc]]],
+            ["GLUE", [["GLUE", "glue", 0, 1, pc], ["PUNCH", "finish.punch", -1, 1, bi], ["SUB", "finish.sub", 0, 1, pc], ["LOW CUT", "finish.lowcut", 20, 300, v => Math.round(v) + " Hz"]]], FINPAGE("finish.")] },
+  mash: { make: ["MASH", "a new melody · A"], alt: ["BEAT BABY", "other mode · X"], two: true, bars: [2, 4, 8],
+    fresh: () => ({ bars: 4, seed: 1, blend: 0.5, density: 0.5, legato: 0.55, tune: 0.5, bass: 0.6, pad: 0.45, space: 0.4, arp: false, finish: FIN() }),
+    pages: [["NOTES", [["BLEND A to B", "blend", 0, 1, v => Math.round((1 - v) * 100) + " / " + Math.round(v * 100)], ["DENSITY", "density", 0, 1, pc], ["LEGATO", "legato", 0, 1, pc], ["TUNE", "tune", 0, 1, pc]]],
+            ["BED", [["BASS", "bass", 0, 1, pc], ["PAD", "pad", 0, 1, pc], ["SPACE", "space", 0, 1, pc], ["WIDTH", "finish.width", 0, 2, pc]]], FINPAGE("finish.")] },
+  vocal: { make: ["CHOP", "a new pattern · A"], alt: ["TAPE STOP", "on or off · X"], two: false, bars: [1, 2, 4],
+    fresh: () => ({ bars: 2, seed: 1, style: "hook", tuned: true, floor: "off", stop: 0, density: 0.6, melody: 0.5, gate: 0.8, octave: 0.1, ratchet: 0.1, stutter: 0.3, reverse: 0.15, pump: 0, floorLevel: 0.8, bassLevel: 0.6, formant: 1.5, pitch: 0, double: 0.5, air: 0.5, echo: 0.3, echoDiv: 0.75, space: 0.4, grit: 0.05, finish: FIN() }),
+    pages: [["PATTERN", [["DENSITY", "density", 0, 1, pc], ["MELODY", "melody", 0, 1, pc], ["GATE", "gate", 0, 1, pc], ["OCTAVE JUMPS", "octave", 0, 1, pc]]],
+            ["GLITCH", [["ROLLS", "ratchet", 0, 1, pc], ["STUTTER", "stutter", 0, 1, pc], ["REVERSE", "reverse", 0, 1, pc], ["PUMP", "pump", 0, 1, pc]]],
+            ["FLOOR", [["KICK + HATS", "floorLevel", 0, 1, pc], ["BASS", "bassLevel", 0, 1, pc], ["FORMANT", "formant", -6, 6, v => (v > 0 ? "+" : "") + v.toFixed(1)], ["PITCH", "pitch", -12, 12, v => Math.round(v) + " st"]]],
+            ["FX", [["DOUBLE", "double", 0, 1, pc], ["AIR", "air", 0, 1, pc], ["ECHO", "echo", 0, 1, pc], ["SPACE", "space", 0, 1, pc]]]] },
+};
+const VSTYLE = { hook: {}, house: { floor: "house", pump: 0.55, gate: 0.55 }, techno: { floor: "techno", pump: 0.7, gate: 0.4, melody: 0.15, ratchet: 0.45 }, brat: { floor: "house", pump: 0.7, octave: 0.45, ratchet: 0.4 }, glitch: { floor: "off", pump: 0, stutter: 0.7, ratchet: 0.7, reverse: 0.5, octave: 0.5, stop: 1 } };
+const get = (o, path) => path.split(".").reduce((a, k) => a[k], o), put = (o, path, v) => { const ks = path.split("."); ks.slice(0, -1).reduce((a, k) => a[k], o)[ks[ks.length - 1]] = v; };
+
+// ---------------------------------------------------------------- state
+let st = getState() || {}, room = "", mode = "", cfg = null, prm = null, page = 0, sel = 0, busy = false, dirty = false, bId = 0, seenAct = st.actSeq || 0, timer = 0;
+const store = k => "nc333." + k, load = k => { try { return JSON.parse(localStorage.getItem(store(k))); } catch (e) { return null; } }, save = () => { try { localStorage.setItem(store(mode), JSON.stringify(prm)); localStorage.setItem(store("hybridMode"), room === "hybrid" ? mode : (load("hybridMode") || "beat")); } catch (e) {} };
+function setup(r) {
+  room = r; mode = r === "hybrid" ? (load("hybridMode") === "mash" ? "mash" : "beat") : r; cfg = CFG[mode]; if (!cfg) return;
+  prm = Object.assign(cfg.fresh(), load(mode) || {}); page = 0; sel = 0;
+  $("pa").querySelector("b").textContent = cfg.make[0]; $("pa").querySelector("small").textContent = cfg.make[1]; $("px").querySelector("b").textContent = cfg.alt[0]; $("px").querySelector("small").textContent = cfg.alt[1];
+  $("lb").style.display = $("brow").style.display = cfg.two ? "" : "none"; $("la").textContent = cfg.two ? "FIRST SOUND (A)" : mode === "vocal" ? "VOICE" : "SOUND"; $("lb").textContent = "SECOND SOUND (B)";
+  $("bars").innerHTML = cfg.bars.map(b => `<button class="cap" data-b="${b}">${b} BAR${b > 1 ? "S" : ""}</button>`).join(""); $("bars").querySelectorAll("button").forEach(b => b.addEventListener("pointerdown", () => { prm.bars = +b.dataset.b; changed(true); }));
+  $("pg").innerHTML = cfg.pages.map(p => `<button class="cap">${p[0]}</button>`).join(""); [...$("pg").children].forEach((b, k) => b.addEventListener("pointerdown", () => { page = k; sel = k * 4; paint(); }));
+  const ex = $("extra"), md = $("modes"); ex.innerHTML = md.innerHTML = "";
+  const chips = (host, key, opts, after) => opts.forEach(([v, t]) => { const b = document.createElement("button"); b.className = "cap"; b.textContent = t; b._k = key; b._v = v; b.addEventListener("pointerdown", () => { prm[key] = v; if (after) after(v); changed(true); }); host.appendChild(b); });
+  if (mode === "vocal") { chips(ex, "style", [["hook", "HOOK"], ["house", "HOUSE"], ["techno", "TECHNO"], ["brat", "BRAT"], ["glitch", "GLITCH"]], v => Object.assign(prm, VSTYLE[v])); chips(md, "floor", [["off", "NO FLOOR"], ["house", "HOUSE"], ["techno", "TECHNO"]]); chips(md, "tuned", [[true, "IN KEY"], [false, "AS SUNG"]]); }
+  if (mode === "mash") chips(md, "arp", [[false, "MELODY"], [true, "ARPEGGIO"]]);
+  if (!bId && st.sounds && st.sounds.length > 1) bId = (st.sounds.find(s => s.id !== st.cur) || st.sounds[0]).id;
+  paint(); publish();
+}
+// ---------------------------------------------------------------- sliders
+for (let k = 0; k < 4; k++) {
+  const el = document.createElement("div"); el.className = "s"; el.innerHTML = `<div class="h"><span class="dim"></span><b></b></div><div class="t"><i></i><u></u></div>`; $("sl").appendChild(el);
+  let drag = false; const move = e => { const sp = cfg.pages[page][1][k]; if (!sp) return; const r = el.querySelector(".t").getBoundingClientRect(), u = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)); let v = sp[2] + (sp[3] - sp[2]) * u; if (sp[1] === "pitch") v = Math.round(v); put(prm, sp[1], v); changed(false); };
+  el.addEventListener("pointerdown", e => { el.setPointerCapture(e.pointerId); drag = true; sel = page * 4 + k; move(e); }); el.addEventListener("pointermove", e => { if (drag) move(e); }); for (const ev of ["pointerup", "pointercancel"]) el.addEventListener(ev, () => { drag = false; });
+}
+function nudge(d) { const sp = cfg.pages[Math.floor(sel / 4)][1][sel % 4]; if (!sp) return; const step = sp[1] === "pitch" ? 1 : (sp[3] - sp[2]) * 0.04; put(prm, sp[1], Math.max(sp[2], Math.min(sp[3], get(prm, sp[1]) + d * step))); changed(false); }
+function paint() {
+  if (!cfg) return; page = Math.max(0, Math.min(cfg.pages.length - 1, Math.floor(sel / 4)));
+  [...$("pg").children].forEach((b, k) => b.classList.toggle("on", k === page));
+  [...$("sl").children].forEach((el, k) => { const sp = cfg.pages[page][1][k]; el.style.visibility = sp ? "" : "hidden"; if (!sp) return; const v = get(prm, sp[1]), u = (v - sp[2]) / (sp[3] - sp[2]); el.classList.toggle("sel", sel === page * 4 + k); el.querySelector("span").textContent = sp[0]; el.querySelector("b").innerHTML = String(sp[4](v)).replace("%", '<span style="font-family:sans-serif">%</span>'); el.querySelector("i").style.width = u * 100 + "%"; el.querySelector("u").style.left = u * 100 + "%"; });
+  $("bars").querySelectorAll("button").forEach(b => b.classList.toggle("on", +b.dataset.b === prm.bars));
+  for (const b of [...$("extra").children, ...$("modes").children]) b.classList.toggle("on", prm[b._k] === b._v);
+  const A = src(st.cur), B = src(bId), kn = s => !s ? "" : s.key >= 0 ? NOTES[s.key] + (s.minor ? " minor" : " major") : "no clear key";
+  $("an").textContent = A ? A.name : "…"; $("ak").textContent = kn(A); $("bn").textContent = B ? B.name : "…"; $("bk").textContent = kn(B);
+  $("bpmv").textContent = Math.round(st.bpm || 120) + " BPM"; $("pb").classList.toggle("on", !!st.hear); $("pa").classList.toggle("busy", busy); $("px").classList.toggle("on", mode === "vocal" && !!prm.stop);
+  $("keep").style.opacity = st.result ? 1 : 0.4; $("py").style.opacity = st.result ? 1 : 0.4;
+}
+const src = id => (st.sounds || []).find(s => s.id === id) || null;
+const keyOf = () => { const A = src(st.cur), B = src(bId), k = A && A.key >= 0 ? A : cfg.two && B && B.key >= 0 ? B : null; return k ? { root: k.key, scale: k.minor ? "min" : "maj" } : { root: 9, scale: "min" }; };
+function publish() { if (!cfg) return; const k = keyOf(), A = src(st.cur), B = src(bId); NC.share(NOTES[k.root] + (k.scale === "min" ? " MINOR" : " MAJOR") + "|" + (cfg.two ? "from " + (A ? A.name : "?") + " × " + (B ? B.name : "?") : "from " + (A ? A.name : "?")) + (mode === "crystal" ? " · depth " + prm.depth : mode === "vocal" ? " · " + prm.style.toUpperCase() + " pattern" : " · " + (mode === "beat" ? "BEAT BABY" : "SAMPLE MASH"))); }
+// a setting moved: remake the same loop with it (after a short pause while a slider is still moving)
+function changed(now) { save(); paint(); publish(); if (!hasMade()) return; clearTimeout(timer); timer = setTimeout(() => render(false), now ? 30 : 350); }
+const hasMade = () => !!prm.made;
+
+// ---------------------------------------------------------------- the rooms' engine, in a worker
+let lab = null, reqN = 0; const waiting = new Map(), have = new Set();
+function labCall(msg, xfer) { if (!lab) { lab = new Worker("lab.js"); lab.onmessage = e => { const m = e.data; if (m.t === "progress") { if (typeof m.p === "number") NC.say("WORKING " + Math.round(m.p * 100) + "%"); return; } const w = waiting.get(m.req); if (w) { waiting.delete(m.req); m.error ? w[1](new Error(m.error)) : w[0](m); } }; lab.onerror = e => { for (const w of waiting.values()) w[1](new Error(e.message || "engine error")); waiting.clear(); }; }
+  return new Promise((ok, no) => { const req = ++reqN; waiting.set(req, [ok, no]); lab.postMessage(Object.assign({ req }, msg), xfer || []); }); }
+async function ensure(id) { if (have.has(id)) return; const s = src(id); const buf = await (await fetch("/sound/" + id)).arrayBuffer(), n = buf.byteLength / 8; if (n < 64) throw new Error("that sound could not be read"); const L = new Float32Array(buf.slice(0, n * 4)), R = new Float32Array(buf.slice(n * 4, n * 8)); await labCall({ t: "put", id, L, R, rate: 48000, name: s ? s.name : "" }, [L.buffer, R.buffer]); have.add(id); }
+async function render(fresh) {
+  if (busy) { dirty = true; return; } if (!cfg || !src(st.cur) || (cfg.two && !src(bId))) { NC.say(cfg && cfg.two ? "CHOOSE TWO SOUNDS" : "CHOOSE A SOUND"); return; }
+  busy = true; dirty = false; paint(); NC.say("WORKING");
+  try {
+    const a = st.cur, b = bId, k = keyOf(), bpm = Math.round(st.bpm || 120); await ensure(a); if (cfg.two) await ensure(b);
+    if (fresh) prm.seed = (Math.random() * 4294967296) >>> 0;
+    const base = { bpm, root: k.root, scale: k.scale, bars: prm.bars, seed: prm.seed, outRate: 48000 }; let job, name;
+    if (mode === "crystal") {
+      if (fresh || !prm.layers.length) { const r = await labCall({ t: "plan", seed: prm.seed, depth: prm.depth, keep: [] }); prm.layers = r.layers; prm.sculpt.layers = prm.layers.map(LAYER); }
+      job = Object.assign(base, { kind: "crystal", srcId: a, layers: prm.layers.map(l => ({ arch: l.arch, seed: l.seed, depth: l.depth })), sculpt: prm.sculpt }); name = prm.layers.map(l => l.arch.replace("_", " ")).join(" × ");
+    } else if (mode === "beat") { job = Object.assign(base, { kind: "beat", blend: prm.blend, finish: prm.finish, a: { id: a, edit: { sens: 0.5 } }, b: { id: b, edit: { sens: 0.5 } }, swing: prm.swing, wild: prm.wild, tight: prm.tight, glue: prm.glue, overrides: {}, lanes: { K: { level: 1, mute: false, sound: "auto" }, S: { level: 1, mute: false, sound: "auto" }, H: { level: 1, mute: false, sound: "auto" }, P: { level: 1, mute: false, sound: "auto" } } }); name = "BEAT BABY"; }
+    else if (mode === "mash") { job = Object.assign(base, { kind: "mash", blend: prm.blend, finish: prm.finish, a: { id: a }, b: { id: b }, density: prm.density, legato: prm.legato, tune: prm.tune, bass: prm.bass, pad: prm.pad, space: prm.space, octave: 0, arp: { on: !!prm.arp, pattern: "up", rate: 1, oct: 2 }, notes: null, chords: null }); name = "SAMPLE MASH"; }
+    else { const o = Object.assign({}, prm); delete o.made; job = Object.assign(o, base, { kind: "voxchop", srcId: a, exclude: [], mutes: [], finish: prm.finish }); name = "CHOP " + prm.style.toUpperCase(); }
+    const r = await labCall({ t: "render", job }), L = r.L, R = r.R, n = L.length, pcm = new Int16Array(n * 2);
+    for (let i = 0; i < n; i++) { pcm[2 * i] = Math.max(-32768, Math.min(32767, Math.round(L[i] * 32767))); pcm[2 * i + 1] = Math.max(-32768, Math.min(32767, Math.round(R[i] * 32767))); }
+    const bytes = new Uint8Array(pcm.buffer); NC.resBegin(); for (let p = 0; p < bytes.length; p += 393216) { let s = ""; const end = Math.min(bytes.length, p + 393216); for (let q = p; q < end; q += 32768) s += String.fromCharCode.apply(null, bytes.subarray(q, Math.min(end, q + 32768))); NC.resChunk(btoa(s)); }
+    NC.resEnd(name, (r.data && r.data.bars) || prm.bars); prm.made = true; save(); NC.say("");
+  } catch (err) { NC.say(String(err && err.message || err).toUpperCase().slice(0, 60)); }
+  busy = false; poll(); if (dirty) render(false);
+}
+// ---------------------------------------------------------------- buttons
+const make = () => { if (mode === "crystal") prm.depth = 1; render(true); };
+function alt() { if (mode === "crystal") { prm.depth = Math.min(7, (prm.depth || 1) + 1); publish(); render(true); } else if (mode === "vocal") { prm.stop = prm.stop ? 0 : 1; changed(true); } else { try { localStorage.setItem(store("hybridMode"), mode === "beat" ? "mash" : "beat"); } catch (e) {} setup("hybrid"); } }
+const stepB = d => { const L = st.sounds || []; if (!L.length) return; const i = Math.max(0, L.findIndex(s => s.id === bId)); bId = L[(i + d + L.length) % L.length].id; paint(); publish(); };
+const press = (id, fn) => { const b = $(id); b.addEventListener("pointerdown", () => { b.classList.add("down"); fn(); setTimeout(poll, 60); }); for (const ev of ["pointerup", "pointercancel", "pointerleave"]) b.addEventListener(ev, () => b.classList.remove("down")); };
+press("pa", make); press("pb", () => NC.hear(!st.hear)); press("px", alt); press("py", () => NC.toDeck()); press("keep", () => NC.keep());
+press("a-", () => NC.sound(-1)); press("a+", () => NC.sound(1)); press("b-", () => stepB(-1)); press("b+", () => stepB(1));
+press("t-", () => NC.bpm(Math.round(st.bpm || 120) - 1)); press("t+", () => NC.bpm(Math.round(st.bpm || 120) + 1));
+function poll() {
+  const s = getState(); if (!s) return; const curWas = st.cur, bpmWas = Math.round(st.bpm || 0); st = s;
+  if (s.room && s.room !== "grain" && s.room !== room) setup(s.room);
+  if (s.actSeq !== seenAct) { seenAct = s.actSeq; const a = s.act; if (a === "A") make(); else if (a === "B") NC.hear(!s.hear); else if (a === "X") alt(); else if (a === "Y") NC.toDeck(); else if (a === "LEFT" || a === "RIGHT") { const n = cfg.pages.length * 4; sel = (sel + (a === "LEFT" ? -1 : 1) + n) % n; } else if (a === "UP") nudge(1); else if (a === "DOWN") nudge(-1); else if (a === "L1") NC.sound(-1); else if (a === "R1") NC.sound(1); }
+  if (cfg && (curWas !== s.cur || bpmWas !== Math.round(s.bpm))) publish();
+  paint();
+}
+watchRoom(false, "bottom"); poll(); setInterval(poll, 100);
+</script>
+</body></html>

@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Nice Crystal 333 display</title><link rel="stylesheet" href="ui.css">
+<style>
+html { font-size: calc(100vw / 96); }
+body { background: radial-gradient(ellipse at 30% 50%, #1B1F5E 0%, #07071A 45%, #020206 100%); }
+#name { position: absolute; left: 13.6rem; top: 2.8rem; max-width: 56rem; overflow: hidden; text-overflow: ellipsis; padding-right: 1rem; font-size: 3rem; letter-spacing: .2rem; color: #fff; text-shadow: 0 0 1.8rem rgba(140,150,255,.9); white-space: nowrap; }
+#sub { position: absolute; left: 13.6rem; top: 8.4rem; font-size: 1.5rem; letter-spacing: .1rem; }
+#keybpm { position: absolute; right: 3rem; top: 3.2rem; font-size: 2.2rem; color: #fff; text-align: right; }
+#wave { position: absolute; left: 13.6rem; top: 12.4rem; width: 79.4rem; height: 24rem; touch-action: none; }
+#read { position: absolute; left: 13.6rem; top: 37.6rem; width: 79.4rem; display: flex; justify-content: space-between; font-size: 1.2rem; }
+</style></head>
+<body>
+<div class="streak" style="top: 44%; height: 4.6rem; transform: rotate(16deg); background: linear-gradient(90deg, rgba(61,91,255,0), #8A6BFF 24%, #B9C4FF 44%, #3D5BFF 72%, rgba(61,91,255,0)); filter: blur(2.2rem); opacity: .8"></div>
+<div class="streak" style="top: 47%; height: .4rem; transform: rotate(16deg); background: linear-gradient(90deg, rgba(255,255,255,0), #fff 40%, #9FB0FF 70%, rgba(255,255,255,0)); filter: blur(1px)"></div>
+<div id="rail"></div>
+<div id="name" class="f skew">…</div><div id="sub" class="dim"></div>
+<div id="keybpm" class="f skew"></div>
+<canvas id="wave"></canvas>
+<div id="read" class="f dim"><span id="r1"></span><span id="r3"></span></div>
+<div id="foot"><div id="deck"></div><div id="meter"><div><i id="mL"></i></div><div><i id="mR"></i></div></div></div>
+<div id="status"></div>
+<script src="ui.js"></script>
+<script>
+const cv = $("wave"), g = cv.getContext("2d"); let peaks = [], st = null, ver = -1, mv = [0, 0];
+const VERB = { crystal: "CRYSTALLISE", hybrid: "HYBRID", vocal: "VOCAL SHARD" };
+function refresh() {
+  st = getState(); if (!st) return;
+  if (st.version !== ver) { ver = st.version; peaks = (NC.resultPeaks() || "").split(",").map(Number).filter(v => !isNaN(v)); }
+  const sh = (st.share || "").split("|");
+  $("name").textContent = st.result || VERB[st.room] || ""; $("sub").textContent = st.notice || sh[1] || "";
+  $("keybpm").textContent = (sh[0] || "") + " · " + Math.round(st.bpm);
+  $("r1").textContent = st.result ? (st.resultBars ? st.resultBars + " BARS · " : "") + st.resultSec.toFixed(2) + " s" : "PRESS A TO MAKE ONE"; $("r3").textContent = st.hear ? "PLAYING" : "";
+  paintRail($("rail"), st); paintDeck($("deck"), st); $("status").textContent = statusLine(st);
+}
+function frame() {
+  const dpr = devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight; if (cv.width !== Math.round(W * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
+  g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
+  const n = peaks.length, mid = H / 2, amp = H * 0.46, ph = NC.phases().split(",").map(Number), s = NC.snap().split(",").map(Number);
+  if (n > 1 && st && st.result) {
+    const bars = st.resultBars || 0; g.strokeStyle = "#3A3F78"; g.lineWidth = 1; for (let b = 1; b < bars; b++) { const x = b / bars * W; g.beginPath(); g.moveTo(x, 6); g.lineTo(x, H - 6); g.stroke(); }
+    for (const [sign, color] of [[-1, "#FFFFFF"], [1, "#9FB0FF"]]) { g.strokeStyle = color; g.lineWidth = 2; g.shadowColor = "#9FB0FF"; g.shadowBlur = 8; g.beginPath(); for (let i = 0; i < n; i++) { const x = i / (n - 1) * W, y = mid + sign * Math.max(1.5, peaks[i] * amp); if (i) g.lineTo(x, y); else g.moveTo(x, y); } g.stroke(); }
+    g.shadowBlur = 0;
+    if (ph[0] >= 0) { const x = ph[0] * W; g.shadowColor = "#B9C4FF"; g.shadowBlur = 18; g.fillStyle = "#fff"; g.fillRect(x - 1.5, 6, 3, H - 12); g.shadowBlur = 0; const tr = g.createLinearGradient(x - 46, 0, x, 0); tr.addColorStop(0, "rgba(124,140,255,0)"); tr.addColorStop(1, "rgba(124,140,255,.35)"); g.fillStyle = tr; g.fillRect(x - 46, 6, 46, H - 12); }
+  }
+  paintDeckPhases($("deck"), ph);
+  const f = v => Math.max(0, Math.min(100, (20 * Math.log10(Math.max(1e-4, v)) + 48) / 48 * 100)); mv[0] = Math.max(f(s[15] || 0), mv[0] - 2.5); mv[1] = Math.max(f(s[16] || 0), mv[1] - 2.5); $("mL").style.width = mv[0] + "%"; $("mR").style.width = mv[1] + "%";
+  requestAnimationFrame(frame);
+}
+cv.addEventListener("pointerdown", () => NC.hear(!(st && st.hear)));
+buildRail($("rail")); buildDeck($("deck")); watchRoom(false, "top");
+refresh(); setInterval(refresh, 200); requestAnimationFrame(frame);
+</script>
+</body></html>

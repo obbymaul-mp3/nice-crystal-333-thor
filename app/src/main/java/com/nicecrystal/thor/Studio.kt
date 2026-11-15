@@ -27,8 +27,9 @@ object Studio {
     const val TONE = 16; const val RESO = 17; const val DRIVE = 18; const val CRUSH = 19; const val CHORUS = 20; const val DELAY = 21; const val DTIME = 22; const val DFEED = 23; const val SPACE = 24; const val DECAY = 25
     const val PLAY = 28; const val FREEZE = 29; const val KEYLOCK = 31; const val GRID = 32; const val XPOSE = 34; const val BEND = 35
 
-    class Sound(val name: String, val asset: String?, var file: java.io.File? = null) { var peaks: String = ""; var seconds = 0f; var l: FloatArray? = null; var r: FloatArray? = null; var keyRoot = -2; var keyMinor = true }
+    class Sound(val name: String, val asset: String?, var file: java.io.File? = null) { val id = nextId++; var bars = 0; var peaks: String = ""; var seconds = 0f; var l: FloatArray? = null; var r: FloatArray? = null; var keyRoot = -2; var keyMinor = true }
 
+    private var nextId = 1
     val sounds = mutableListOf(Sound("GLASS BELLS", "bells.wav"), Sound("CRYSTAL", "crystal.wav"), Sound("SNOW VOICE", "voice.wav"), Sound("DUSTY BOOM-BAP", "beat1.wav"), Sound("GLASS HOUSE", "beat2.wav"))
     val moods = listOf("DREAM", "GLITCH", "GHOST", "MACHINE", "HELL")
     // five pages of four sliders, in the order the bottom screen shows them
@@ -36,7 +37,73 @@ object Studio {
     @Volatile var usbSeen = ""; @Volatile var midiCount = 0; @Volatile var midiLast = ""
     @Volatile var cur = 0; @Volatile var live = false; @Volatile var mood = 0; @Volatile var sel = 0; @Volatile var version = 0
     @Volatile var midiName = ""; @Volatile var micOk = false
-    val bpm = 128.0
+    @Volatile var bpm = 128.0
+    // ---- rooms, the room's result, the deck
+    @Volatile var room = "grain"; @Volatile var result: Sound? = null; @Volatile var hearing = false; @Volatile var deckOn = false
+    val deck = java.util.concurrent.CopyOnWriteArrayList<Sound>()
+    @Volatile var act = ""; @Volatile var actSeq = 0; @Volatile var outRecording = false
+    private val rooms = listOf("grain", "crystal", "hybrid", "vocal")
+    /** Changing rooms silences everything: the instrument, the preview and the deck. */
+    fun enter(r: String) {
+        if (r !in rooms || r == room) return
+        Native.setParam(PLAY, 0f); Native.allOff(); if (live) goLive(false)
+        hear(false); if (deckOn) deckToggle()
+        room = r; Native.setGrainGate(r == "grain"); version++
+    }
+    fun hear(on: Boolean) { hearing = on && result != null; Native.loopPlay(0, hearing) }
+    private var resBuf: java.io.ByteArrayOutputStream? = null
+    fun resBegin() { resBuf = java.io.ByteArrayOutputStream() }
+    fun resChunk(b64: String) { try { resBuf?.write(android.util.Base64.decode(b64, android.util.Base64.DEFAULT)) } catch (e: Exception) { android.util.Log.e("NiceCrystal", "chunk", e) } }
+    /** A loop a room has just made (16-bit, left and right interleaved): it becomes the room's result and starts playing. */
+    fun resEnd(name: String, bars: Int) {
+        val b = resBuf?.toByteArray() ?: return; resBuf = null
+        val sh = ByteBuffer.wrap(b).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer(); val n = sh.remaining() / 2; if (n < 256) return
+        val l = FloatArray(n); val r = FloatArray(n); for (i in 0 until n) { l[i] = sh.get(2 * i) / 32768f; r[i] = sh.get(2 * i + 1) / 32768f }
+        val s = Sound(name.take(28), null); s.l = l; s.r = r; s.seconds = n / 48000f; s.bars = bars; s.peaks = peaksOf(l, r, 480); s.keyRoot = -1
+        result = s; Native.loopSet(0, l, r); hear(true); version++
+    }
+    /** KEEP: the result joins your sounds (and is saved), so any room can use it. */
+    fun keepResult() { val s = result ?: return; if (sounds.contains(s)) { say("ALREADY KEPT"); return }; Thread { detectKey(s); keep(s); sounds.add(0, s); cur++; say("KEPT AS A SOUND"); version++ }.start() }
+    fun toDeck() {
+        val s = result ?: return; val l = s.l ?: return; val r = s.r ?: l
+        if (deck.size >= 8) { say("THE DECK IS FULL"); return }
+        deck.add(s); Native.loopSet(deck.size, l, r); hear(false)
+        if (!deckOn) { deckOn = true; Native.deckPlay(true) } else Native.loopPlay(deck.size, true)
+        version++
+    }
+    fun deckToggle() { if (deck.isEmpty()) { deckOn = false; return }; deckOn = !deckOn; Native.deckPlay(deckOn) }
+    fun deckRemove(i: Int) {
+        if (i < 0 || i >= deck.size) return; val was = deckOn; Native.deckPlay(false); deck.removeAt(i)
+        for (k in 1..8) Native.loopClear(k); deck.forEachIndexed { k, s -> Native.loopSet(k + 1, s.l!!, s.r ?: s.l!!) }
+        deckOn = was && deck.isNotEmpty(); if (deckOn) Native.deckPlay(true); version++
+    }
+    /** REC OUT: everything you hear, written as a WAV into Music/NiceCrystal333 where other apps can find it. */
+    fun outRec() {
+        if (!outRecording) { outRecording = Native.outRecStart(); return }
+        outRecording = false
+        Thread {
+            try {
+                val pcm = Native.outRecStop() ?: run { say("TOO SHORT TO SAVE"); return@Thread }; val c = app ?: return@Thread
+                val name = "NiceCrystal333 " + SimpleDateFormat("yyyy-MM-dd HH.mm.ss", Locale.US).format(Date()) + ".wav"
+                val bb = ByteBuffer.allocate(44 + pcm.size * 2).order(ByteOrder.LITTLE_ENDIAN)
+                bb.put("RIFF".toByteArray()).putInt(36 + pcm.size * 2).put("WAVEfmt ".toByteArray()).putInt(16).putShort(1).putShort(2).putInt(48000).putInt(48000 * 4).putShort(4).putShort(16).put("data".toByteArray()).putInt(pcm.size * 2)
+                bb.asShortBuffer().put(pcm)
+                val v = android.content.ContentValues().apply { put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, name); put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "audio/wav"); put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, "Music/NiceCrystal333") }
+                val uri = c.contentResolver.insert(android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, v) ?: run { say("COULD NOT SAVE"); return@Thread }
+                c.contentResolver.openOutputStream(uri)?.use { it.write(bb.array()) }
+                say("SAVED IN MUSIC / NICECRYSTAL333")
+            } catch (e: Exception) { android.util.Log.e("NiceCrystal", "out rec", e); say("COULD NOT SAVE") }
+        }.start()
+    }
+    fun note(t: String) { say(t) }
+    @Volatile var share = ""
+    /** A sound for the rooms' own engine: left then right, 32-bit floats. */
+    fun soundBytes(id: Int): ByteArray? {
+        val s = sounds.firstOrNull { it.id == id } ?: return null
+        if (s.l == null) { try { if (s.asset != null) decodeWav(app!!.assets.open("sounds/" + s.asset).use { it.readBytes() }, s) else if (s.file != null) decodeWav(s.file!!.readBytes(), s) } catch (e: Exception) { return null } }
+        val l = s.l ?: return null; val r = s.r ?: l; if (s.keyRoot == -2) detectKey(s)
+        val bb = ByteBuffer.allocate(l.size * 8).order(ByteOrder.LITTLE_ENDIAN); val fb = bb.asFloatBuffer(); fb.put(l); fb.put(r); return bb.array()
+    }
     private var app: Context? = null
     private var booted = false; private var visible = 0
     private val main = Handler(Looper.getMainLooper())
@@ -230,6 +297,13 @@ object Studio {
     // ---- physical controls
     fun key(e: KeyEvent): Boolean {
         val down = e.action == KeyEvent.ACTION_DOWN; val first = down && e.repeatCount == 0
+        if (e.keyCode == KeyEvent.KEYCODE_BUTTON_START) { if (first) enter(rooms[(rooms.indexOf(room) + 1) % rooms.size]); return true }
+        if (room != "grain") {
+            val name = when (e.keyCode) { KeyEvent.KEYCODE_BUTTON_A -> "A"; KeyEvent.KEYCODE_BUTTON_B -> "B"; KeyEvent.KEYCODE_BUTTON_X -> "X"; KeyEvent.KEYCODE_BUTTON_Y -> "Y"
+                KeyEvent.KEYCODE_DPAD_LEFT -> "LEFT"; KeyEvent.KEYCODE_DPAD_RIGHT -> "RIGHT"; KeyEvent.KEYCODE_DPAD_UP -> "UP"; KeyEvent.KEYCODE_DPAD_DOWN -> "DOWN"; KeyEvent.KEYCODE_BUTTON_L1 -> "L1"; KeyEvent.KEYCODE_BUTTON_R1 -> "R1"; else -> return false }
+            if (down && (first || name == "UP" || name == "DOWN")) { act = name; actSeq++ }
+            return true
+        }
         when (e.keyCode) {
             KeyEvent.KEYCODE_BUTTON_A -> if (first) pad("PLAY", true)
             KeyEvent.KEYCODE_BUTTON_B -> if (first) pad("FREEZE", true)
@@ -239,7 +313,6 @@ object Studio {
             KeyEvent.KEYCODE_BUTTON_R1 -> if (first) throwOn("HALF") else if (!down) throwOff("HALF")
             KeyEvent.KEYCODE_BUTTON_L2 -> if (first) throwOn("FILTER") else if (!down) throwOff("FILTER")
             KeyEvent.KEYCODE_BUTTON_R2 -> if (first) throwOn("SPACE") else if (!down) throwOff("SPACE")
-            KeyEvent.KEYCODE_BUTTON_START -> if (first) pad("MOOD", true)
             KeyEvent.KEYCODE_BUTTON_SELECT -> if (first) goLive(!live)
             KeyEvent.KEYCODE_BUTTON_THUMBL -> if (first) loadSound(cur + 1)
             KeyEvent.KEYCODE_BUTTON_THUMBR -> if (first) grab()
@@ -280,6 +353,7 @@ object Studio {
                 if (rx == 0f) pitching = false
                 if (ticks % 120 == 60) { scanDevices(); pickInput() }
                 if (recording && Native.recSeconds() > 59.5f) rec()
+                if (outRecording && Native.outRecSeconds() > 299f) outRec()
                 if (++ticks % 12 == 0) Native.takeGrab()?.let { g ->
                     val n = g.size / 2; val s = Sound("GRAB " + SimpleDateFormat("HH.mm.ss", Locale.US).format(Date()), null)
                     s.l = g.copyOfRange(0, n); s.r = g.copyOfRange(n, 2 * n); s.seconds = n / 48000f; s.peaks = peaksOf(s.l!!, s.r!!, 480); Thread { detectKey(s); keep(s); version++ }.start()
@@ -344,11 +418,12 @@ object Studio {
     fun state(): String {
         val p = Native.getParams(); val s = sounds[cur]; val sb = StringBuilder(640)
         sb.append("{\"sound\":\"").append(s.name.replace("\"", "'")).append("\",\"seconds\":").append(s.seconds).append(",\"live\":").append(live)
-            .append(",\"mood\":\"").append(moods[mood]).append("\",\"sel\":").append(sel).append(",\"version\":").append(version).append(",\"bpm\":").append(bpm.toInt())
+            .append(",\"room\":\"").append(room).append("\",\"cur\":").append(s.id).append(",\"hear\":").append(hearing).append(",\"deckOn\":").append(deckOn).append(",\"act\":\"").append(act).append("\",\"actSeq\":").append(actSeq).append(",\"outRec\":").append(if (outRecording) Native.outRecSeconds() else -1f).append(",\"result\":\"").append((result?.name ?: "").replace("\"", "'")).append("\",\"resultSec\":").append(result?.seconds ?: 0f).append(",\"resultBars\":").append(result?.bars ?: 0).append(",\"sounds\":[").append(sounds.joinToString(",") { "{\"id\":" + it.id + ",\"name\":\"" + it.name.replace("\"", "'") + "\",\"key\":" + it.keyRoot + ",\"minor\":" + it.keyMinor + "}" }).append("],\"deck\":[").append(deck.joinToString(",") { "{\"name\":\"" + it.name.replace("\"", "'") + "\",\"bars\":" + it.bars + "}" }).append("]").append(",\"share\":\"").append(share.replace("\\", "/").replace("\"", "'")).append("\"").append(",\"mood\":\"").append(moods[mood]).append("\",\"sel\":").append(sel).append(",\"version\":").append(version).append(",\"bpm\":").append(bpm.toInt())
             .append(",\"keyRoot\":").append(if (live) -1 else s.keyRoot).append(",\"keyMinor\":").append(s.keyMinor).append(",\"usb\":\"").append(usbSeen.replace("\"", "'")).append("\",\"midiCount\":").append(midiCount).append(",\"midiLast\":\"").append(midiLast).append("\",\"midi\":\"").append(midiName.replace("\"", "'")).append("\",\"notice\":\"").append(if (System.currentTimeMillis() < noticeUntil) notice else "").append("\",\"mine\":").append(s.asset == null).append(",\"mic\":").append(micOk).append(",\"input\":\"").append(inputName.replace("\"", "'")).append("\",\"rec\":").append(recording).append(",\"recSec\":").append(if (recording) Native.recSeconds() else 0f)
             .append(",\"info\":\"").append(Native.info().replace("\"", "'")).append("\",\"throws\":\"").append(heldThrows()).append("\",\"p\":[")
         for (i in p.indices) { if (i > 0) sb.append(','); sb.append(p[i]) }
         return sb.append("]}").toString()
     }
     fun peaks(): String = sounds[cur].peaks
+    fun resultPeaks(): String = result?.peaks ?: ""
 }
