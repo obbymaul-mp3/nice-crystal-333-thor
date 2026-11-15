@@ -74,9 +74,9 @@ const get = (o, path) => path.split(".").reduce((a, k) => a[k], o), put = (o, pa
 
 // ---------------------------------------------------------------- state
 let st = getState() || {}, room = "", mode = "", cfg = null, prm = null, page = 0, sel = 0, busy = false, dirty = false, bId = 0, seenAct = st.actSeq || 0, timer = 0;
-const store = k => "nc333." + k, load = k => { try { return JSON.parse(localStorage.getItem(store(k))); } catch (e) { return null; } }, save = () => { try { localStorage.setItem(store(mode), JSON.stringify(prm)); localStorage.setItem(store("hybridMode"), room === "hybrid" ? mode : (load("hybridMode") || "beat")); } catch (e) {} };
+const store = k => "nc333." + k, load = k => { try { return JSON.parse(localStorage.getItem(store(k))); } catch (e) { return null; } }, save = () => { try { localStorage.setItem(store(mode), JSON.stringify(prm)); } catch (e) {} }, hybridMode = () => { try { return localStorage.getItem(store("hybridMode")) === "mash" ? "mash" : "beat"; } catch (e) { return "beat"; } };
 function setup(r) {
-  room = r; mode = r === "hybrid" ? (load("hybridMode") === "mash" ? "mash" : "beat") : r; cfg = CFG[mode]; if (!cfg) return;
+  room = r; mode = r === "hybrid" ? hybridMode() : r; cfg = CFG[mode]; if (!cfg) return;
   prm = Object.assign(cfg.fresh(), load(mode) || {}); page = 0; sel = 0;
   $("pa").querySelector("b").textContent = cfg.make[0]; $("pa").querySelector("small").textContent = cfg.make[1]; $("px").querySelector("b").textContent = cfg.alt[0]; $("px").querySelector("small").textContent = cfg.alt[1];
   $("lb").style.display = $("brow").style.display = cfg.two ? "" : "none"; $("la").textContent = cfg.two ? "FIRST SOUND (A)" : mode === "vocal" ? "VOICE" : "SOUND"; $("lb").textContent = "SECOND SOUND (B)";
