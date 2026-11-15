@@ -11,7 +11,7 @@ body { background: radial-gradient(ellipse at 24% 30%, #161A52 0%, #07071A 50%, 
 #xy > span { position: absolute; left: 0; width: 100%; text-align: center; font-size: 1.1rem; pointer-events: none; }
 #keys { flex: 1; display: flex; gap: .6rem; min-height: 0; } #keys button { flex: 1; border-radius: 4rem; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 1.4rem; font-size: 1.4rem; background: rgba(10,10,30,.8); box-shadow: inset 0 0 0 1px #5F6BC8; }
 #keys button.root { background: linear-gradient(180deg, #fff, #B9C4FF); color: #05050A; box-shadow: 0 0 2rem rgba(185,196,255,.8); } #keys button.fifth { background: rgba(61,91,255,.35); box-shadow: inset 0 0 0 1px #7C8CFF; color: #fff; } #keys button.down { filter: brightness(1.6); transform: translateY(.2rem); }
-#src { display: flex; gap: .6rem; height: 4.6rem; } #src button { font-size: 1.1rem; } #src .w { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 1.2rem; } #src .n { width: 4.6rem; } #src .m { flex: 1; padding: 0; } #rec.on { background: rgba(255,90,122,.45); box-shadow: inset 0 0 0 1px #FF8AA0, 0 0 2rem rgba(255,90,122,.8); color: #fff; }
+#src { display: flex; gap: .6rem; height: 4.6rem; } #src button { font-size: 1.1rem; } #src .w { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 1.2rem; } #src .n { width: 3.9rem; font-size: 1.5rem; } #src .m { flex: 1; padding: 0; } #rec.on { background: rgba(255,90,122,.45); box-shadow: inset 0 0 0 1px #FF8AA0, 0 0 2rem rgba(255,90,122,.8); color: #fff; }
 #pads { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; } #pads button { height: 6.6rem; border-radius: 3.3rem; text-align: left; padding: 0 2.4rem; color: #fff; } #pads b { display: block; font-family: Michroma; font-weight: 400; font-size: 1.4rem; } #pads small { display: block; font-size: 1.2rem; font-weight: 700; margin-top: .2rem; }
 #pads .a { background: rgba(10,10,30,.8); box-shadow: inset 0 0 0 1px #fff; } #pads .a.on { background: linear-gradient(180deg, #fff, #B9C4FF); color: #05050A; box-shadow: 0 0 2.6rem rgba(185,196,255,.8); }
 #pads .b { background: rgba(61,91,255,.14); box-shadow: inset 0 0 0 1px #7C8CFF; } #pads .b.on { background: rgba(61,91,255,.6); box-shadow: inset 0 0 0 1px #B9C4FF, 0 0 2.6rem rgba(61,91,255,.9); }
@@ -29,7 +29,7 @@ body { background: radial-gradient(ellipse at 24% 30%, #161A52 0%, #07071A 50%, 
   <div id="keys" class="f"></div>
 </div>
 <div id="right">
-  <div id="src" class="f"><button class="cap n" data-step="-1" aria-label="Previous sound">‹</button><button class="cap n" data-step="1" aria-label="Next sound">›</button><button class="cap m" id="live">LIVE</button><button class="cap m" id="rec">REC</button><button class="cap m" id="grab">GRAB</button></div>
+  <div id="src" class="f"><button class="cap n" data-step="-1" aria-label="Previous sound">‹</button><button class="cap n" data-step="1" aria-label="Next sound">›</button><button class="cap n" id="add" aria-label="Add a file">+</button><button class="cap m" id="live">LIVE</button><button class="cap m" id="rec">REC</button><button class="cap m" id="grab">GRAB</button></div>
   <div id="pads">
     <button class="a" data-pad="PLAY"><b>PLAY</b><small>プレイ · A</small></button><button class="b" data-pad="FREEZE"><b>FREEZE</b><small>フリーズ · B</small></button>
     <button class="x" data-pad="REVERSE"><b>REVERSE</b><small>リバース · X</small></button><button class="y" data-pad="CHAOS"><b>CHAOS</b><small>カオス · Y</small></button>
@@ -75,6 +75,8 @@ const keyBtns = [0, 1, 2, 3, 4, 5, 6, 7].map(k => {
 });
 for (const b of document.querySelectorAll("[data-step]")) b.addEventListener("pointerdown", () => { NC.sound(+b.dataset.step); setTimeout(poll, 150); });
 $("live").addEventListener("pointerdown", () => { NC.live(!st.live); setTimeout(poll, 60); }); $("grab").addEventListener("pointerdown", () => { NC.grab(); setTimeout(poll, 400); }); $("rec").addEventListener("pointerdown", () => { NC.rec(); setTimeout(poll, 80); });
+// + adds a file from storage; holding it for a second removes the loaded sound if it is one of yours
+{ const b = $("add"); let t = 0, held = false; b.addEventListener("pointerdown", () => { held = false; t = setTimeout(() => { held = true; NC.remove(); setTimeout(poll, 200); }, 900); }); b.addEventListener("pointerup", () => { clearTimeout(t); if (!held) NC.add(); }); b.addEventListener("pointercancel", () => clearTimeout(t)); }
 function paint() {
   const p = st.p; if (!p.length) return;
   $("puck").style.left = (8 + 84 * p[P.POSITION]) + "%"; $("puck").style.top = (92 - 84 * p[P.SIZE]) + "%"; $("xp").innerHTML = "POSITION " + Math.round(p[P.POSITION] * 100) + '<span style="font-family:sans-serif">%</span>'; $("xs").textContent = "SIZE " + fmt.size(p[P.SIZE]);

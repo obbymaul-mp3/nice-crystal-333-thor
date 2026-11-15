@@ -8,8 +8,8 @@ if (!window.NC) {
   let live = false, t0 = performance.now();
   window.NC = {
     set: (i, v) => { p[i] = v; }, pad: (n, d) => { if (d && n === "PLAY") p[28] = 1 - p[28]; if (d && n === "FREEZE") p[29] = 1 - p[29]; if (d && n === "REVERSE") p[9] = 1 - p[9]; },
-    note() {}, sound() {}, live: on => { live = on; }, grab() {}, rec() {}, select() {},
-    state: () => JSON.stringify({ sound: "GLASS BELLS", seconds: 9, live, mood: "DREAM", sel: 2, version: 1, bpm: 128, keyRoot: 4, keyMinor: true, usb: "FM-1 (audio, MIDI)", midi: "FM-1", mic: true, input: "Gart Stringer", rec: false, recSec: 0, info: "48000 Hz · block 96 · buffer 4 ms · AAudio · input running", throws: "", p }),
+    note() {}, sound() {}, live: on => { live = on; }, grab() {}, rec() {}, add() {}, remove() {}, select() {},
+    state: () => JSON.stringify({ sound: "GLASS BELLS", seconds: 9, live, mood: "DREAM", sel: 2, version: 1, bpm: 128, keyRoot: 4, keyMinor: true, usb: "FM-1 (audio, MIDI)", midi: "FM-1", mic: true, input: "Gart Stringer", rec: false, recSec: 0, notice: "", mine: false, info: "48000 Hz · block 96 · buffer 4 ms · AAudio · input running", throws: "", p }),
     peaks: () => Array.from({ length: 480 }, (_, i) => (Math.exp(-((i % 120) / 40)) * (0.5 + 0.5 * Math.abs(Math.sin(i * 0.9)))).toFixed(3)).join(","),
     snap: () => { const t = (performance.now() - t0) / 1000, len = 0.34, ws = p[0] * (1 - len), a = [live ? 1 : 0, 9, ws + ((t * 0.2) % 1) * len, ws, len, 0, 6, 1, 0.2, 0.5, 4, -1, 0, 0, 0, 0.5 + 0.2 * Math.sin(t * 3), 0.45, ...p.slice(0, 28), 6]; for (let k = 0; k < 6; k++) a.push(ws + len * ((k * 0.17 + t * 0.3) % 1), 0.3 + 0.1 * k, Math.sin(k * 2.1)); return a.join(","); },
   };

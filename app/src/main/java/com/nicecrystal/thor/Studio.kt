@@ -27,7 +27,7 @@ object Studio {
     const val TONE = 16; const val RESO = 17; const val DRIVE = 18; const val CRUSH = 19; const val CHORUS = 20; const val DELAY = 21; const val DTIME = 22; const val DFEED = 23; const val SPACE = 24; const val DECAY = 25
     const val PLAY = 28; const val FREEZE = 29; const val KEYLOCK = 31; const val GRID = 32; const val XPOSE = 34; const val BEND = 35
 
-    class Sound(val name: String, val asset: String?) { var peaks: String = ""; var seconds = 0f; var l: FloatArray? = null; var r: FloatArray? = null; var keyRoot = -2; var keyMinor = true }
+    class Sound(val name: String, val asset: String?, var file: java.io.File? = null) { var peaks: String = ""; var seconds = 0f; var l: FloatArray? = null; var r: FloatArray? = null; var keyRoot = -2; var keyMinor = true }
 
     val sounds = mutableListOf(Sound("GLASS BELLS", "bells.wav"), Sound("CRYSTAL", "crystal.wav"), Sound("SNOW VOICE", "voice.wav"), Sound("DUSTY BOOM-BAP", "beat1.wav"), Sound("GLASS HOUSE", "beat2.wav"))
     val moods = listOf("DREAM", "GLITCH", "GHOST", "MACHINE", "HELL")
@@ -46,6 +46,8 @@ object Studio {
     fun boot(ctx: Context) {
         if (booted) return; booted = true; app = ctx.applicationContext
         Native.start(); Native.setClock(bpm); Native.setParam(KEYLOCK, 1f); Native.setKeyLock(true)
+        // your own takes, grabs and imported files come first, newest first; the built-in sounds follow
+        try { soundDir()?.listFiles { f -> f.name.endsWith(".wav") }?.sortedByDescending { it.lastModified() }?.forEachIndexed { i, f -> sounds.add(i, Sound(f.name.removeSuffix(".wav"), null, f)) } } catch (e: Exception) { android.util.Log.e("NiceCrystal", "library", e) }
         loadSound(0); startMidi(ctx.applicationContext); main.post(ticker)
     }
     fun shown() { visible++; if (visible == 1 && booted) Native.start() }
@@ -72,7 +74,7 @@ object Studio {
         Thread {
             val g = Native.recStop() ?: return@Thread; val n = g.size / 2
             val s = Sound("TAKE " + SimpleDateFormat("HH.mm.ss", Locale.US).format(Date()), null)
-            s.l = g.copyOfRange(0, n); s.r = g.copyOfRange(n, 2 * n); s.seconds = n / 48000f; s.peaks = peaksOf(s.l!!, s.r!!, 480); detectKey(s)
+            s.l = g.copyOfRange(0, n); s.r = g.copyOfRange(n, 2 * n); s.seconds = n / 48000f; s.peaks = peaksOf(s.l!!, s.r!!, 480); detectKey(s); keep(s)
             sounds.add(0, s); cur = 0; live = false; Native.setLive(false); Native.loadSample(s.l!!, s.r!!, 48000)
             Native.setParam(MIX, 0.5f); Native.setParam(POSITION, 0f); Native.setParam(LENGTH, 1f); Native.setParam(PLAY, 1f); version++
         }.start()
@@ -84,6 +86,7 @@ object Studio {
         Thread {
             try {
                 if (s.l == null && s.asset != null) { val b = app!!.assets.open("sounds/" + s.asset).use { it.readBytes() }; decodeWav(b, s) }
+                if (s.l == null && s.file != null) decodeWav(s.file!!.readBytes(), s)
                 val l = s.l ?: return@Thread; val r = s.r ?: l
                 if (s.peaks.isEmpty()) s.peaks = peaksOf(l, r, 480)
                 if (s.keyRoot == -2) detectKey(s)
@@ -104,6 +107,58 @@ object Studio {
             }
             pos += 8 + size + (size and 1)
         }
+    }
+    // ---- keeping sounds: every take, grab and imported file is written to the app's sounds folder as a WAV
+    @Volatile var notice = ""; private var noticeUntil = 0L
+    private fun say(t: String) { notice = t; noticeUntil = System.currentTimeMillis() + 3500 }
+    var importer: (() -> Unit)? = null
+    private fun soundDir(): java.io.File? { val c = app ?: return null; val d = java.io.File(c.getExternalFilesDir(null) ?: c.filesDir, "sounds"); d.mkdirs(); return d }
+    private fun keep(s: Sound) {
+        try {
+            val l = s.l ?: return; val r = s.r ?: l; val dir = soundDir() ?: return; val safe = s.name.replace(Regex("[^A-Za-z0-9 ._-]"), " ").trim().ifEmpty { "SOUND" }
+            var f = java.io.File(dir, "$safe.wav"); var k = 2; while (f.exists()) { f = java.io.File(dir, "$safe $k.wav"); k++ }
+            val n = l.size; val bb = ByteBuffer.allocate(44 + n * 4).order(ByteOrder.LITTLE_ENDIAN)
+            bb.put("RIFF".toByteArray()).putInt(36 + n * 4).put("WAVEfmt ".toByteArray()).putInt(16).putShort(1).putShort(2).putInt(48000).putInt(48000 * 4).putShort(4).putShort(16).put("data".toByteArray()).putInt(n * 4)
+            for (i in 0 until n) { bb.putShort((l[i].coerceIn(-1f, 1f) * 32767f).roundToInt().toShort()); bb.putShort((r[i].coerceIn(-1f, 1f) * 32767f).roundToInt().toShort()) }
+            f.writeBytes(bb.array()); s.file = f
+        } catch (e: Exception) { android.util.Log.e("NiceCrystal", "save", e); say("COULD NOT SAVE") }
+    }
+    /** Removes the loaded sound if it is one of yours (built-in sounds stay). */
+    fun removeCurrent() { val s = sounds[cur]; if (s.asset != null || sounds.size < 2) return; try { s.file?.delete() } catch (e: Exception) {}; sounds.removeAt(cur); say("REMOVED"); loadSound(cur) }
+    fun pickFile() { importer?.invoke() }
+    /** A file chosen from the Thor's storage: any audio the device can decode, up to 90 seconds, brought to 48 kHz. */
+    fun importUri(uri: android.net.Uri) {
+        val c = app ?: return; say("READING THE FILE")
+        Thread {
+            try {
+                var name = "IMPORT"
+                c.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { q -> if (q.moveToFirst()) name = (q.getString(0) ?: name).substringBeforeLast('.') }
+                val ex = android.media.MediaExtractor(); ex.setDataSource(c, uri, null)
+                var fmt: android.media.MediaFormat? = null
+                for (i in 0 until ex.trackCount) { val f = ex.getTrackFormat(i); if (f.getString(android.media.MediaFormat.KEY_MIME)?.startsWith("audio/") == true) { ex.selectTrack(i); fmt = f; break } }
+                val format = fmt ?: run { say("NO AUDIO IN THAT FILE"); return@Thread }
+                var rate = format.getInteger(android.media.MediaFormat.KEY_SAMPLE_RATE); var ch = format.getInteger(android.media.MediaFormat.KEY_CHANNEL_COUNT)
+                val codec = android.media.MediaCodec.createDecoderByType(format.getString(android.media.MediaFormat.KEY_MIME)!!); codec.configure(format, null, null, 0); codec.start()
+                val pcm = java.io.ByteArrayOutputStream(); val info = android.media.MediaCodec.BufferInfo(); var inDone = false; var outDone = false; var idle = 0
+                while (!outDone && idle < 500) {
+                    if (!inDone) { val ii = codec.dequeueInputBuffer(10000); if (ii >= 0) { val n = ex.readSampleData(codec.getInputBuffer(ii)!!, 0); if (n < 0) { codec.queueInputBuffer(ii, 0, 0, 0, android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM); inDone = true } else { codec.queueInputBuffer(ii, 0, n, ex.sampleTime, 0); ex.advance() } } }
+                    val oi = codec.dequeueOutputBuffer(info, 10000)
+                    if (oi >= 0) { idle = 0; val buf = codec.getOutputBuffer(oi)!!; val b = ByteArray(info.size); buf.position(info.offset); buf.get(b); pcm.write(b); codec.releaseOutputBuffer(oi, false)
+                        if (info.flags and android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0 || pcm.size() > rate.toLong() * ch * 2 * 90) outDone = true }
+                    else if (oi == android.media.MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) { val f = codec.outputFormat; rate = f.getInteger(android.media.MediaFormat.KEY_SAMPLE_RATE); ch = f.getInteger(android.media.MediaFormat.KEY_CHANNEL_COUNT) }
+                    else idle++
+                }
+                try { codec.stop() } catch (e: Exception) {}; codec.release(); ex.release()
+                val sh = ByteBuffer.wrap(pcm.toByteArray()).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer(); val frames = sh.remaining() / max(1, ch)
+                if (frames < rate / 10) { say("COULD NOT READ THAT FILE"); return@Thread }
+                val n = (frames.toLong() * 48000 / rate).toInt(); val l = FloatArray(n); val r = FloatArray(n); val step = rate / 48000.0
+                for (i in 0 until n) { val p = i * step; val i0 = minOf(frames - 1, p.toInt()); val i1 = minOf(frames - 1, i0 + 1); val t = (p - i0).toFloat()
+                    val a0 = sh.get(i0 * ch) / 32768f; val a1 = sh.get(i1 * ch) / 32768f; l[i] = a0 + (a1 - a0) * t
+                    if (ch > 1) { val b0 = sh.get(i0 * ch + 1) / 32768f; val b1 = sh.get(i1 * ch + 1) / 32768f; r[i] = b0 + (b1 - b0) * t } else r[i] = l[i] }
+                val s = Sound(name.uppercase(Locale.US).take(28), null); s.l = l; s.r = r; s.seconds = n / 48000f; s.peaks = peaksOf(l, r, 480); detectKey(s); keep(s)
+                sounds.add(0, s); notice = ""; loadSound(0)
+            } catch (e: Exception) { android.util.Log.e("NiceCrystal", "import", e); say("COULD NOT READ THAT FILE") }
+        }.start()
     }
     private fun peaksOf(l: FloatArray, r: FloatArray, bins: Int): String {
         val sb = StringBuilder(); val n = l.size
@@ -227,7 +282,7 @@ object Studio {
                 if (recording && Native.recSeconds() > 59.5f) rec()
                 if (++ticks % 12 == 0) Native.takeGrab()?.let { g ->
                     val n = g.size / 2; val s = Sound("GRAB " + SimpleDateFormat("HH.mm.ss", Locale.US).format(Date()), null)
-                    s.l = g.copyOfRange(0, n); s.r = g.copyOfRange(n, 2 * n); s.seconds = n / 48000f; s.peaks = peaksOf(s.l!!, s.r!!, 480); Thread { detectKey(s); version++ }.start()
+                    s.l = g.copyOfRange(0, n); s.r = g.copyOfRange(n, 2 * n); s.seconds = n / 48000f; s.peaks = peaksOf(s.l!!, s.r!!, 480); Thread { detectKey(s); keep(s); version++ }.start()
                     sounds.add(0, s); cur = 0; live = false; Native.setParam(MIX, 0.5f); Native.setParam(PLAY, 1f); version++
                 }
             }
@@ -290,7 +345,7 @@ object Studio {
         val p = Native.getParams(); val s = sounds[cur]; val sb = StringBuilder(640)
         sb.append("{\"sound\":\"").append(s.name.replace("\"", "'")).append("\",\"seconds\":").append(s.seconds).append(",\"live\":").append(live)
             .append(",\"mood\":\"").append(moods[mood]).append("\",\"sel\":").append(sel).append(",\"version\":").append(version).append(",\"bpm\":").append(bpm.toInt())
-            .append(",\"keyRoot\":").append(if (live) -1 else s.keyRoot).append(",\"keyMinor\":").append(s.keyMinor).append(",\"usb\":\"").append(usbSeen.replace("\"", "'")).append("\",\"midiCount\":").append(midiCount).append(",\"midiLast\":\"").append(midiLast).append("\",\"midi\":\"").append(midiName.replace("\"", "'")).append("\",\"mic\":").append(micOk).append(",\"input\":\"").append(inputName.replace("\"", "'")).append("\",\"rec\":").append(recording).append(",\"recSec\":").append(if (recording) Native.recSeconds() else 0f)
+            .append(",\"keyRoot\":").append(if (live) -1 else s.keyRoot).append(",\"keyMinor\":").append(s.keyMinor).append(",\"usb\":\"").append(usbSeen.replace("\"", "'")).append("\",\"midiCount\":").append(midiCount).append(",\"midiLast\":\"").append(midiLast).append("\",\"midi\":\"").append(midiName.replace("\"", "'")).append("\",\"notice\":\"").append(if (System.currentTimeMillis() < noticeUntil) notice else "").append("\",\"mine\":").append(s.asset == null).append(",\"mic\":").append(micOk).append(",\"input\":\"").append(inputName.replace("\"", "'")).append("\",\"rec\":").append(recording).append(",\"recSec\":").append(if (recording) Native.recSeconds() else 0f)
             .append(",\"info\":\"").append(Native.info().replace("\"", "'")).append("\",\"throws\":\"").append(heldThrows()).append("\",\"p\":[")
         for (i in p.indices) { if (i > 0) sb.append(','); sb.append(p[i]) }
         return sb.append("]}").toString()

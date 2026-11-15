@@ -26,6 +26,8 @@ class Bridge {
     @JavascriptInterface fun live(on: Boolean) = Studio.goLive(on)
     @JavascriptInterface fun grab() = Studio.grab()
     @JavascriptInterface fun rec() = Studio.rec()
+    @JavascriptInterface fun add() = Studio.pickFile()
+    @JavascriptInterface fun remove() = Studio.removeCurrent()
     @JavascriptInterface fun select(i: Int) { Studio.sel = i }
     @JavascriptInterface fun state(): String = Studio.state()
     @JavascriptInterface fun peaks(): String = Studio.peaks()
@@ -74,6 +76,7 @@ class MainActivity : ScreenActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Studio.importer = { runOnUiThread { try { startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("audio/*"), 7) } catch (e: Exception) { android.util.Log.e("NiceCrystal", "picker", e) } } }
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) Studio.micGranted()
         else requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 1)
     }
@@ -95,5 +98,10 @@ class MainActivity : ScreenActivity() {
             return if (iAmDisplay) "top" else "bottom"
         } catch (e: Exception) { android.util.Log.e("NiceCrystal", "second screen", e); return "single" }
     }
-    override fun onDestroy() { super.onDestroy(); if (isFinishing) other?.get()?.finish() }
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == 7 && resultCode == RESULT_OK) data?.data?.let { Studio.importUri(it) }
+    }
+    override fun onDestroy() { super.onDestroy(); if (isFinishing) { Studio.importer = null; other?.get()?.finish() } }
 }
