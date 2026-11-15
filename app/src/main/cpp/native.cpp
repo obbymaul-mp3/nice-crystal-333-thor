@@ -22,18 +22,30 @@ class Audio : public oboe::AudioStreamDataCallback, public oboe::AudioStreamErro
   std::unique_ptr<GrainEngine> engine; std::unique_ptr<MasterBus> master;
   std::shared_ptr<oboe::AudioStream> out, in; std::atomic<oboe::AudioStream*> inLive{nullptr}; std::mutex ctl;   // ctl guards every call that is not the audio callback
   std::atomic<bool> wantInput{false}, running{false}; std::atomic<int> xruns{0}, inFrames{0};
-  float oL[CHUNK], oR[CHUNK], mL[CHUNK], mR[CHUNK], iL[CHUNK], iR[CHUNK]; std::vector<float> inBuf; int inCh = 0;
-  double sr = 48000;
+  float oL[CHUNK], oR[CHUNK], mL[CHUNK], mR[CHUNK], iL[CHUNK], iR[CHUNK]; std::vector<float> inBuf; int inCh = 0, inRate = 0;
+  double sr = 48000; bool outI16 = false; const char* outName = "";
 
+  // Three ways of asking for the output. The first that gives a small block wins; otherwise the smallest block does.
   bool openOut() {
-    oboe::AudioStreamBuilder b;
-    b.setDirection(oboe::Direction::Output)->setPerformanceMode(oboe::PerformanceMode::LowLatency)->setSharingMode(oboe::SharingMode::Exclusive)
-        ->setFormat(oboe::AudioFormat::Float)->setChannelCount(2)->setUsage(oboe::Usage::Game)->setDataCallback(this)->setErrorCallback(this);   // the device's own rate: asking for another one can cost the fast path
-    const oboe::Result r = b.openStream(out);
-    if (r != oboe::Result::OK) { LOGI("output failed: %s", oboe::convertToText(r)); return false; }
-    out->setBufferSizeInFrames(out->getFramesPerBurst() * 2);
-    sr = out->getSampleRate(); LOGI("output %d Hz, burst %d", out->getSampleRate(), out->getFramesPerBurst());
-    return true;
+    struct Try { oboe::AudioApi api; oboe::AudioFormat fmt; const char* name; };
+    const Try tries[3] = {{oboe::AudioApi::AAudio, oboe::AudioFormat::Float, "AAudio float"}, {oboe::AudioApi::AAudio, oboe::AudioFormat::I16, "AAudio 16-bit"}, {oboe::AudioApi::OpenSLES, oboe::AudioFormat::I16, "OpenSL"}};
+    int best = -1, bestBurst = 1 << 30;
+    for (int pass = 0; pass < 2; pass++) {
+      for (int k = 0; k < 3; k++) {
+        if (pass == 1 && k != best) continue;
+        oboe::AudioStreamBuilder b;
+        b.setAudioApi(tries[k].api)->setDirection(oboe::Direction::Output)->setPerformanceMode(oboe::PerformanceMode::LowLatency)->setSharingMode(oboe::SharingMode::Exclusive)
+            ->setFormat(tries[k].fmt)->setFormatConversionAllowed(false)->setChannelCount(2)->setUsage(oboe::Usage::Game)->setDataCallback(this)->setErrorCallback(this);
+        std::shared_ptr<oboe::AudioStream> s;
+        if (b.openStream(s) != oboe::Result::OK) continue;
+        const int burst = s->getFramesPerBurst(); LOGI("output try %s: %d Hz, block %d", tries[k].name, s->getSampleRate(), burst);
+        if (pass == 1 || burst <= 480) { out = s; outI16 = s->getFormat() == oboe::AudioFormat::I16; outName = tries[k].name; out->setBufferSizeInFrames(burst * 2); sr = out->getSampleRate(); return true; }
+        if (burst < bestBurst) { bestBurst = burst; best = k; }
+        s->close();
+      }
+      if (best < 0) break;
+    }
+    return false;
   }
   bool openIn() {
     closeIn();
@@ -41,9 +53,10 @@ class Audio : public oboe::AudioStreamDataCallback, public oboe::AudioStreamErro
     b.setDirection(oboe::Direction::Input)->setPerformanceMode(oboe::PerformanceMode::LowLatency)->setSharingMode(oboe::SharingMode::Shared)
         ->setFormat(oboe::AudioFormat::Float)->setChannelCount(2)->setSampleRate(int(sr))->setSampleRateConversionQuality(oboe::SampleRateConversionQuality::Medium)
         ->setChannelConversionAllowed(true)->setFormatConversionAllowed(true)->setInputPreset(oboe::InputPreset::Unprocessed);
-    std::shared_ptr<oboe::AudioStream> s; const oboe::Result r = b.openStream(s);
+    std::shared_ptr<oboe::AudioStream> s; oboe::Result r = b.openStream(s);
+    if (r != oboe::Result::OK) { b.setChannelCount(oboe::ChannelCount::Unspecified); r = b.openStream(s); }   // a multi-channel USB device: take it as it is and use its first two channels
     if (r != oboe::Result::OK) { LOGI("input failed: %s", oboe::convertToText(r)); return false; }
-    inCh = s->getChannelCount(); inBuf.assign(size_t(CHUNK) * 4 * std::max(1, inCh), 0.f); s->requestStart(); in = s; inLive.store(s.get());
+    inCh = s->getChannelCount(); inRate = s->getSampleRate(); inBuf.assign(size_t(CHUNK) * 4 * std::max(1, inCh), 0.f); s->requestStart(); in = s; inLive.store(s.get());
     LOGI("input %d Hz, %d ch, device %d", s->getSampleRate(), inCh, s->getDeviceId());
     return true;
   }
@@ -63,7 +76,7 @@ class Audio : public oboe::AudioStreamDataCallback, public oboe::AudioStreamErro
   }
 
   oboe::DataCallbackResult onAudioReady(oboe::AudioStream*, void* data, int32_t frames) override {
-    float* o = static_cast<float*>(data); GrainEngine* e = engine.get();
+    float* o = static_cast<float*>(data); int16_t* o16 = static_cast<int16_t*>(data); GrainEngine* e = engine.get();
     int done = 0;
     while (done < frames) {
       const int n = std::min(CHUNK, frames - done); bool haveIn = false;
@@ -79,7 +92,8 @@ class Audio : public oboe::AudioStreamDataCallback, public oboe::AudioStreamErro
       }
       e->process(oL, oR, n, haveIn ? iL : nullptr, haveIn ? iR : nullptr);
       master->process(oL, oR, mL, mR, n);
-      for (int i = 0; i < n; i++) { o[2 * (done + i)] = mL[i]; o[2 * (done + i) + 1] = mR[i]; }
+      if (outI16) for (int i = 0; i < n; i++) { o16[2 * (done + i)] = int16_t(std::lrintf(std::fmax(-1.f, std::fmin(1.f, mL[i])) * 32767.f)); o16[2 * (done + i) + 1] = int16_t(std::lrintf(std::fmax(-1.f, std::fmin(1.f, mR[i])) * 32767.f)); }
+      else for (int i = 0; i < n; i++) { o[2 * (done + i)] = mL[i]; o[2 * (done + i) + 1] = mR[i]; }
       done += n;
     }
     return oboe::DataCallbackResult::Continue;
@@ -134,7 +148,8 @@ JNI(jfloatArray, snapshot)(JNIEnv* env, jobject) {
 JNI(jstring, info)(JNIEnv* env, jobject) {
   std::string t = "audio off";
   if (A.out) { char b[256]; const double ms = 1000.0 * A.out->getBufferSizeInFrames() / A.out->getSampleRate();
-    snprintf(b, sizeof b, "%d Hz · block %d · buffer %.0f ms · %s %s · input %s", A.out->getSampleRate(), A.out->getFramesPerBurst(), ms,
-             A.out->getPerformanceMode() == oboe::PerformanceMode::LowLatency ? "fast" : "slow path", A.out->getSharingMode() == oboe::SharingMode::Exclusive ? "exclusive" : "shared", A.in ? (A.inFrames.load() > 0 ? "running" : "open, silent") : "off"); t = b; }
+    snprintf(b, sizeof b, "%d Hz · block %d · buffer %.0f ms · %s · %s · input %s", A.out->getSampleRate(), A.out->getFramesPerBurst(), ms,
+             A.out->getPerformanceMode() == oboe::PerformanceMode::LowLatency ? "fast" : "slow path", A.outName, A.in ? (A.inFrames.load() > 0 ? "running" : "open, silent") : "off"); t = b;
+    if (A.in) { snprintf(b, sizeof b, " %d ch %d Hz", A.inCh, A.inRate); t += b; } }
   return env->NewStringUTF(t.c_str());
 }

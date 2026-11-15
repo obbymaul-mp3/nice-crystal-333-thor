@@ -51,8 +51,8 @@ function refresh() {
   if (st.version !== ver) { ver = st.version; peaks = (NC.peaks() || "").split(",").map(Number).filter(v => !isNaN(v)); }
   $("name").textContent = st.live ? "LIVE INPUT" : st.sound; $("sub").textContent = st.live ? "ライブ · the last 20 seconds" : st.seconds.toFixed(2) + " s";
   const hk = heardKey(st); $("keybpm").textContent = (hk ? NOTES[hk.root] + (hk.minor ? " MINOR" : " MAJOR") : st.live ? "LIVE" : "NO KEY") + " · " + st.bpm; $("mood").textContent = st.mood;
-  $("fin").textContent = !st.mic ? "microphone not allowed" : /input running/.test(st.info) ? "receiving" : "nothing coming in"; $("fmidi").textContent = st.midi || (st.usb ? st.usb : "nothing plugged in");
-  $("finfo").textContent = st.info.replace(/ · input.*/, "");
+  $("fin").textContent = !st.mic ? "microphone not allowed" : /input running/.test(st.info) ? "receiving" : "nothing coming in"; $("fmidi").textContent = st.midi ? st.midi + (st.midiCount ? " · " + st.midiCount + " messages · last " + st.midiLast : " · connected, nothing received yet") : (st.usb ? st.usb : "nothing plugged in");
+  $("finfo").textContent = st.info.replace(/ · input.*/, ""); const im = / · input (.*)/.exec(st.info); if (st.mic && im) $("fin").textContent = (/running/.test(im[1]) ? "receiving" : "nothing coming in") + im[1].replace(/running|open, silent|off/, "");
 }
 function frame() {
   const dpr = devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight; if (cv.width !== Math.round(W * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
@@ -69,11 +69,16 @@ function frame() {
   }
   // grains: points of light where each one is reading
   const nd = s[45] || 0; g.shadowColor = "#B9C4FF";
-  for (let k = 0; k < nd; k++) { const x = s[46 + k * 3] * W, lv = Math.min(1, s[47 + k * 3] * 6), pan = s[48 + k * 3]; g.shadowBlur = 14; g.fillStyle = `rgba(255,255,255,${0.35 + 0.65 * lv})`; g.beginPath(); g.arc(x, mid + pan * amp * 0.7, 2 + 4 * lv, 0, 7); g.fill(); }
+  for (let k = 0; k < nd; k++) { const x = s[46 + k * 3] * W, lv = Math.min(1, s[47 + k * 3] * 6), pan = s[48 + k * 3]; g.shadowBlur = 14; g.fillStyle = `rgba(255,255,255,${0.35 + 0.65 * lv})`; g.beginPath(); g.arc(x, mid + pan * amp * 0.7, 3 + 6 * lv, 0, 7); g.fill(); }
   g.shadowBlur = 0;
-  if (!live) { const x = (s[2] || 0) * W; g.fillStyle = "#fff"; g.shadowBlur = 16; g.beginPath(); g.arc(x, mid, 5, 0, 7); g.fill(); g.shadowBlur = 0; }
+  if (!live) {
+    // where the sound is playing right now: a bar of light sweeping the slice (fainter as BLEND goes to grains)
+    const mix = s[17 + P.MIX], tx = (s[5] || 0) * W, a = 0.25 + 0.75 * (1 - (mix || 0)); g.shadowColor = "#B9C4FF"; g.shadowBlur = 18; g.fillStyle = `rgba(255,255,255,${a})`; g.fillRect(tx - 1.5, 6, 3, H - 12); g.shadowBlur = 0;
+    const tr = g.createLinearGradient(tx - 46, 0, tx, 0); tr.addColorStop(0, "rgba(124,140,255,0)"); tr.addColorStop(1, `rgba(124,140,255,${0.35 * a})`); g.fillStyle = tr; g.fillRect(tx - 46, 6, 46, H - 12);
+    const x = (s[2] || 0) * W; g.fillStyle = "#fff"; g.shadowBlur = 16; g.beginPath(); g.arc(x, mid, 5, 0, 7); g.fill(); g.shadowBlur = 0;
+  }
   const slice = total * wl; $("r1").textContent = live ? "LISTENING " + (s[10] || 0).toFixed(0) + " s" : "SLICE " + (slice < 1 ? Math.round(slice * 1000) + " ms" : slice.toFixed(2) + " s");
-  $("r2").textContent = live ? "" : "= " + (240 / Math.max(0.05, slice)).toFixed(1) + " BPM"; $("r3").textContent = (s[6] || 0) + " GRAINS";
+  const speed = Math.pow(2, Math.round(((s[17 + P.PITCH] || 0.5) - 0.5) * 48) / 12); $("r2").textContent = live ? "" : "= " + (240 / Math.max(0.05, slice) * speed).toFixed(1) + " BPM"; $("r3").textContent = (s[6] || 0) + " GRAINS";
   const f = v => Math.max(0, Math.min(100, (20 * Math.log10(Math.max(1e-4, v)) + 48) / 48 * 100)); mv[0] = Math.max(f(s[15] || 0), mv[0] - 2.5); mv[1] = Math.max(f(s[16] || 0), mv[1] - 2.5); $("mL").style.width = mv[0] + "%"; $("mR").style.width = mv[1] + "%";
   requestAnimationFrame(frame);
 }

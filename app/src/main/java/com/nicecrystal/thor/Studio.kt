@@ -33,7 +33,7 @@ object Studio {
     val moods = listOf("DREAM", "GLITCH", "GHOST", "MACHINE", "HELL")
     // five pages of four sliders, in the order the bottom screen shows them
     val sliders = intArrayOf(PITCH, DENSITY, TONE, SPACE, LENGTH, SCAN, SPRAY, SHATTER, SPREAD, ATTACK, SUSTAIN, MIX, RESO, DRIVE, CRUSH, CHORUS, DELAY, DTIME, DFEED, DECAY)
-    @Volatile var usbSeen = ""
+    @Volatile var usbSeen = ""; @Volatile var midiCount = 0; @Volatile var midiLast = ""
     @Volatile var cur = 0; @Volatile var live = false; @Volatile var mood = 0; @Volatile var sel = 0; @Volatile var version = 0
     @Volatile var midiName = ""; @Volatile var micOk = false
     val bpm = 128.0
@@ -211,6 +211,7 @@ object Studio {
     private val midiIn = object : MidiReceiver() {
         override fun onSend(msg: ByteArray, offset: Int, count: Int, timestamp: Long) {
             var i = offset; val end = offset + count
+            midiCount++; midiLast = (offset until minOf(end, offset + 3)).joinToString(" ") { String.format("%02X", msg[it].toInt() and 0xFF) }
             while (i < end) {
                 val st = msg[i].toInt() and 0xFF
                 if (st < 0x80) { i++; continue }
@@ -261,7 +262,7 @@ object Studio {
         val p = Native.getParams(); val s = sounds[cur]; val sb = StringBuilder(640)
         sb.append("{\"sound\":\"").append(s.name.replace("\"", "'")).append("\",\"seconds\":").append(s.seconds).append(",\"live\":").append(live)
             .append(",\"mood\":\"").append(moods[mood]).append("\",\"sel\":").append(sel).append(",\"version\":").append(version).append(",\"bpm\":").append(bpm.toInt())
-            .append(",\"keyRoot\":").append(if (live) -1 else s.keyRoot).append(",\"keyMinor\":").append(s.keyMinor).append(",\"usb\":\"").append(usbSeen.replace("\"", "'")).append("\",\"midi\":\"").append(midiName.replace("\"", "'")).append("\",\"mic\":").append(micOk)
+            .append(",\"keyRoot\":").append(if (live) -1 else s.keyRoot).append(",\"keyMinor\":").append(s.keyMinor).append(",\"usb\":\"").append(usbSeen.replace("\"", "'")).append("\",\"midiCount\":").append(midiCount).append(",\"midiLast\":\"").append(midiLast).append("\",\"midi\":\"").append(midiName.replace("\"", "'")).append("\",\"mic\":").append(micOk)
             .append(",\"info\":\"").append(Native.info().replace("\"", "'")).append("\",\"throws\":\"").append(heldThrows()).append("\",\"p\":[")
         for (i in p.indices) { if (i > 0) sb.append(','); sb.append(p[i]) }
         return sb.append("]}").toString()
